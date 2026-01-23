@@ -42,16 +42,19 @@ export interface SwapRecord {
   id: string
   fromToken: string
   toToken: string
-  fromChain: string
-  toChain: string
+  fromChain?: string
+  toChain?: string
   fromAmount: string
   toAmount: string
   status: "pending" | "completed" | "failed"
   txHash?: string
+  txSignature?: string // Solana transaction signature
   explorerUrl?: string
   timestamp: number
   privacyLevel: PrivacyLevel
   depositAddress?: string
+  error?: string // Error message if failed
+  isPreview?: boolean // True if executed in preview mode
 }
 
 /**

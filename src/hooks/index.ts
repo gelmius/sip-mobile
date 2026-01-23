@@ -37,3 +37,11 @@ export type {
   QuoteFreshness,
   QuoteResult,
 } from "./useQuote"
+
+export {
+  useSwap,
+  getSwapStatusMessage,
+  isSwapComplete,
+  isSwapInProgress,
+} from "./useSwap"
+export type { SwapStatus, SwapParams, SwapResult } from "./useSwap"
