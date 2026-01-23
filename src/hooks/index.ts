@@ -49,3 +49,14 @@ export type { SwapStatus, SwapParams, SwapResult } from "./useSwap"
 // Compliance hooks
 export { useCompliance } from "./useCompliance"
 export type { ComplianceStats, UseComplianceReturn } from "./useCompliance"
+
+// Accessibility hooks
+export {
+  useAccessibility,
+  usePrefersReducedMotion,
+  useScreenReader,
+} from "./useAccessibility"
+export type {
+  AccessibilitySettings,
+  UseAccessibilityReturn,
+} from "./useAccessibility"
