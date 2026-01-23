@@ -27,3 +27,12 @@ export type {
   SecuritySettings,
   SecurityState,
 } from "./security"
+
+// Compliance
+export { useComplianceStore } from "./compliance"
+export type {
+  AuditEventType,
+  AuditEvent,
+  PrivacyScoreBreakdown,
+  ReportConfig,
+} from "./compliance"

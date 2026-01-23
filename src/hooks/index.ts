@@ -45,3 +45,7 @@ export {
   isSwapInProgress,
 } from "./useSwap"
 export type { SwapStatus, SwapParams, SwapResult } from "./useSwap"
+
+// Compliance hooks
+export { useCompliance } from "./useCompliance"
+export type { ComplianceStats, UseComplianceReturn } from "./useCompliance"
