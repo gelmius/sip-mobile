@@ -1,0 +1,17 @@
+{
+  "name": "sip-mobile-publishing",
+  "version": "1.0.0",
+  "description": "Solana dApp Store publishing for SIP Privacy",
+  "private": true,
+  "scripts": {
+    "dapp-store": "dapp-store",
+    "init": "dapp-store init",
+    "validate": "dapp-store validate",
+    "create": "dapp-store create",
+    "publish": "dapp-store publish",
+    "help": "dapp-store --help"
+  },
+  "devDependencies": {
+    "@solana-mobile/dapp-store-cli": "^0.15.0"
+  }
+}

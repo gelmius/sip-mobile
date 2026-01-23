@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+builds/*.apk
+builds/*.aab
+
+# Sensitive files
+*.keystore
+*.jks
+keypair.json
+.env
+.env.local
+
+# CLI cache
+.dapp-store/
+
+# OS files
+.DS_Store
+Thumbs.db
