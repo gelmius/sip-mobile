@@ -54,3 +54,6 @@ export {
   listItemProps,
 } from "./accessibility"
 export type { A11yLabelProps, LiveRegionType } from "./accessibility"
+
+// Logger utilities
+export { logger, log, info, warn, error, debug } from "./logger"

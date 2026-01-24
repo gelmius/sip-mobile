@@ -10,7 +10,7 @@
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { router } from "expo-router"
-import { useCallback, useState } from "react"
+import { useCallback, useState, useMemo } from "react"
 import { useWalletStore, formatAddress } from "@/stores/wallet"
 import { usePrivacyStore } from "@/stores/privacy"
 import { useClaim } from "@/hooks/useClaim"
@@ -167,9 +167,17 @@ export default function HomeScreen() {
   const { balance, usdValue, isLoading: balanceLoading, refresh: refreshBalance } = useBalance()
   const [refreshing, setRefreshing] = useState(false)
 
-  // Get recent payments (last 5)
-  const recentPayments = payments.slice(0, 5)
-  const { count: unclaimedCount, amount: unclaimedAmount } = getClaimableAmount()
+  // Memoize expensive computations
+  const recentPayments = useMemo(() => payments.slice(0, 5), [payments])
+  const claimable = useMemo(() => getClaimableAmount(), [payments])
+  const { count: unclaimedCount, amount: unclaimedAmount } = claimable
+
+  // Memoize privacy stats
+  const privacyStats = useMemo(() => ({
+    total: payments.length,
+    private: payments.filter((p) => p.privacyLevel !== "transparent").length,
+    pending: payments.filter((p) => p.status === "pending").length,
+  }), [payments])
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -292,24 +300,24 @@ export default function HomeScreen() {
         )}
 
         {/* Privacy Stats */}
-        {isConnected && payments.length > 0 && (
+        {isConnected && privacyStats.total > 0 && (
           <View className="flex-row mt-6 gap-3">
             <View className="flex-1 bg-dark-900 rounded-xl p-4 border border-dark-800">
               <Text className="text-dark-500 text-sm">Total Transactions</Text>
               <Text className="text-2xl font-bold text-white mt-1">
-                {payments.length}
+                {privacyStats.total}
               </Text>
             </View>
             <View className="flex-1 bg-dark-900 rounded-xl p-4 border border-dark-800">
               <Text className="text-dark-500 text-sm">Private</Text>
               <Text className="text-2xl font-bold text-brand-400 mt-1">
-                {payments.filter((p) => p.privacyLevel !== "transparent").length}
+                {privacyStats.private}
               </Text>
             </View>
             <View className="flex-1 bg-dark-900 rounded-xl p-4 border border-dark-800">
               <Text className="text-dark-500 text-sm">Pending</Text>
               <Text className="text-2xl font-bold text-yellow-400 mt-1">
-                {payments.filter((p) => p.status === "pending").length}
+                {privacyStats.pending}
               </Text>
             </View>
           </View>
@@ -321,7 +329,7 @@ export default function HomeScreen() {
             <Text className="text-lg font-semibold text-white">
               Recent Activity
             </Text>
-            {payments.length > 0 && (
+            {privacyStats.total > 0 && (
               <TouchableOpacity onPress={() => router.push("/history")}>
                 <Text className="text-brand-400">View All</Text>
               </TouchableOpacity>
