@@ -2,20 +2,22 @@
  * Swap Hook for Jupiter DEX
  *
  * Executes token swaps with:
+ * - Real Jupiter Swap API integration
  * - Privacy toggle (shielded/transparent)
  * - Swap history tracking
  * - Status updates through the flow
  * - Error handling
- *
- * NOTE: Currently uses mock execution.
- * Will integrate real Jupiter API in production.
  */
 
 import { useState, useCallback, useRef } from "react"
+import { Buffer } from "buffer"
 import type { SwapQuote, PrivacyLevel } from "@/types"
 import { useSwapStore } from "@/stores/swap"
 import { useToastStore } from "@/stores/toast"
 import { useWalletStore } from "@/stores/wallet"
+import { useWallet } from "./useWallet"
+import { useSettingsStore } from "@/stores/settings"
+import type { JupiterQuoteResponse } from "./useQuote"
 
 // ============================================================================
 // TYPES
@@ -31,6 +33,7 @@ export type SwapStatus =
 
 export interface SwapParams {
   quote: SwapQuote
+  jupiterQuote: JupiterQuoteResponse
   privacyLevel: PrivacyLevel
 }
 
@@ -152,26 +155,127 @@ function getSwapErrorMessage(err: unknown): {
   }
 }
 
-/**
- * Simulate swap execution delay
- * TODO: Replace with real Jupiter execution
- */
-async function simulateSwapExecution(
-  _quote: SwapQuote,
-  privacyLevel: PrivacyLevel
-): Promise<string> {
-  // Simulate network delay (longer for shielded)
-  const delay = privacyLevel === "shielded" ? 3000 : 2000
-  await new Promise((resolve) => setTimeout(resolve, delay))
+/** Jupiter Swap API endpoint */
+const JUPITER_SWAP_API = "https://quote-api.jup.ag/v6/swap"
 
-  // Generate mock transaction signature
-  const chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-  let signature = ""
-  for (let i = 0; i < 88; i++) {
-    signature += chars.charAt(Math.floor(Math.random() * chars.length))
+/** RPC endpoint for submitting transactions */
+function getRpcEndpoint(network: string): string {
+  const isDev = network === "devnet"
+  return isDev
+    ? "https://api.devnet.solana.com"
+    : "https://api.mainnet-beta.solana.com"
+}
+
+/**
+ * Execute swap using Jupiter API
+ */
+async function executeJupiterSwap(
+  jupiterQuote: JupiterQuoteResponse,
+  userPublicKey: string,
+  signTransaction: (tx: Uint8Array) => Promise<Uint8Array>,
+  network: string
+): Promise<string> {
+  // 1. Get swap transaction from Jupiter
+  const swapResponse = await fetch(JUPITER_SWAP_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      quoteResponse: jupiterQuote,
+      userPublicKey,
+      wrapAndUnwrapSol: true,
+      dynamicComputeUnitLimit: true,
+      prioritizationFeeLamports: "auto",
+    }),
+  })
+
+  if (!swapResponse.ok) {
+    const errorText = await swapResponse.text()
+    throw new Error(`Failed to get swap transaction: ${errorText}`)
   }
 
+  const swapData = await swapResponse.json()
+  const { swapTransaction } = swapData
+
+  // 2. Deserialize the transaction
+  const transactionBuffer = Buffer.from(swapTransaction, "base64")
+  const transactionBytes = new Uint8Array(transactionBuffer)
+
+  // 3. Sign the transaction
+  const signedTransaction = await signTransaction(transactionBytes)
+
+  // 4. Submit to network
+  const rpcEndpoint = getRpcEndpoint(network)
+  const signedBase64 = Buffer.from(signedTransaction).toString("base64")
+
+  const sendResponse = await fetch(rpcEndpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "sendTransaction",
+      params: [signedBase64, { encoding: "base64", skipPreflight: false }],
+    }),
+  })
+
+  const sendResult = await sendResponse.json()
+
+  if (sendResult.error) {
+    throw new Error(sendResult.error.message || "Transaction failed")
+  }
+
+  const signature = sendResult.result
+  if (!signature) {
+    throw new Error("No signature returned from transaction")
+  }
+
+  // 5. Wait for confirmation
+  await waitForConfirmation(rpcEndpoint, signature)
+
   return signature
+}
+
+/**
+ * Wait for transaction confirmation
+ */
+async function waitForConfirmation(
+  rpcEndpoint: string,
+  signature: string,
+  maxAttempts = 30,
+  intervalMs = 1000
+): Promise<void> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const response = await fetch(rpcEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "getSignatureStatuses",
+          params: [[signature], { searchTransactionHistory: true }],
+        }),
+      })
+
+      const result = await response.json()
+      const status = result?.result?.value?.[0]
+
+      if (status) {
+        if (status.err) {
+          throw new Error("Transaction failed on-chain")
+        }
+        if (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized") {
+          return
+        }
+      }
+    } catch (err) {
+      // Continue polling
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+  }
+
+  throw new Error("Transaction confirmation timeout")
 }
 
 // ============================================================================
@@ -197,7 +301,9 @@ async function simulateSwapExecution(
  * ```
  */
 export function useSwap(): SwapResult {
-  const { isConnected } = useWalletStore()
+  const { isConnected, address } = useWalletStore()
+  const { network } = useSettingsStore()
+  const { signTransaction } = useWallet()
   const { addSwap, isPreviewMode } = useSwapStore()
   const { addToast } = useToastStore()
 
@@ -218,10 +324,10 @@ export function useSwap(): SwapResult {
 
   const execute = useCallback(
     async (params: SwapParams): Promise<boolean> => {
-      const { quote, privacyLevel } = params
+      const { quote, jupiterQuote, privacyLevel } = params
 
       // Validate wallet connection
-      if (!isConnected) {
+      if (!isConnected || !address) {
         const msg = "Please connect your wallet first"
         setError(msg)
         setStatus("error")
@@ -234,7 +340,7 @@ export function useSwap(): SwapResult {
       }
 
       // Validate quote
-      if (!quote) {
+      if (!quote || !jupiterQuote) {
         const msg = "No quote available. Please refresh and try again"
         setError(msg)
         setStatus("error")
@@ -300,13 +406,23 @@ export function useSwap(): SwapResult {
 
         // Step 2: Request wallet signature
         setStatus("signing")
-        await new Promise((resolve) => setTimeout(resolve, 500))
 
         // Step 3: Submit transaction
         setStatus("submitting")
 
-        // Execute swap (mock for now)
-        const signature = await simulateSwapExecution(quote, privacyLevel)
+        // Execute real Jupiter swap
+        const signature = await executeJupiterSwap(
+          jupiterQuote,
+          address,
+          async (tx: Uint8Array) => {
+            const signed = await signTransaction(tx)
+            if (!signed) {
+              throw new Error("Transaction signing rejected")
+            }
+            return signed
+          },
+          network
+        )
 
         // Success
         setTxSignature(signature)
@@ -362,7 +478,7 @@ export function useSwap(): SwapResult {
         return false
       }
     },
-    [isConnected, isPreviewMode, addSwap, addToast]
+    [isConnected, address, network, signTransaction, isPreviewMode, addSwap, addToast]
   )
 
   // Generate explorer URL

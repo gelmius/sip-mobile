@@ -2,12 +2,20 @@
  * Stealth Address Hook
  *
  * Manages stealth address generation and scanning for SIP privacy.
- * Uses EIP-5564 style stealth addresses with secp256k1 curve.
+ * Uses DKSAP (Dual-Key Stealth Address Protocol) with ed25519 curve.
+ *
+ * Based on EIP-5564 style stealth addresses adapted for Solana.
  */
 
 import { useState, useCallback, useEffect, useMemo } from "react"
 import * as SecureStore from "expo-secure-store"
 import { useWalletStore } from "@/stores/wallet"
+import {
+  generateStealthKeys,
+  formatStealthMetaAddress,
+  ed25519PublicKeyToSolanaAddress,
+  type StealthMetaAddress,
+} from "@/lib/stealth"
 
 // ============================================================================
 // TYPES
@@ -26,6 +34,7 @@ export interface StealthAddress {
   chain: string
   spendingKey: string
   viewingKey: string
+  solanaAddress: string // Base58 Solana address derived from stealth
 }
 
 export interface UseStealthReturn {
@@ -50,47 +59,11 @@ const SECURE_STORE_KEY = "sip_stealth_keys"
 const SIP_CHAIN = "solana"
 
 // ============================================================================
-// MOCK CRYPTO (Replace with real SDK integration)
+// HELPERS
 // ============================================================================
 
 /**
- * Generate random hex string
- * TODO: Replace with actual @noble/curves integration
- */
-function generateRandomHex(length: number): string {
-  const array = new Uint8Array(length)
-  // Use expo-crypto for secure random in production
-  for (let i = 0; i < length; i++) {
-    array[i] = Math.floor(Math.random() * 256)
-  }
-  return Array.from(array)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("")
-}
-
-/**
- * Generate mock stealth keys
- * TODO: Replace with actual stealth.ts from SDK
- */
-function generateStealthKeys(): StealthKeys {
-  // In production, use @noble/curves secp256k1
-  const spendingPrivateKey = generateRandomHex(32)
-  const viewingPrivateKey = generateRandomHex(32)
-
-  // Mock public keys (in production, derive from private keys)
-  const spendingPublicKey = "02" + generateRandomHex(32)
-  const viewingPublicKey = "03" + generateRandomHex(32)
-
-  return {
-    spendingPrivateKey,
-    spendingPublicKey,
-    viewingPrivateKey,
-    viewingPublicKey,
-  }
-}
-
-/**
- * Format stealth address
+ * Format stealth address from keys
  * Format: sip:<chain>:<spendingKey>:<viewingKey>
  */
 function formatStealthAddress(
@@ -98,7 +71,14 @@ function formatStealthAddress(
   spendingPublicKey: string,
   viewingPublicKey: string
 ): StealthAddress {
-  const full = `sip:${chain}:${spendingPublicKey}:${viewingPublicKey}`
+  const metaAddress: StealthMetaAddress = {
+    chain,
+    spendingKey: spendingPublicKey,
+    viewingKey: viewingPublicKey,
+  }
+
+  const full = formatStealthMetaAddress(metaAddress)
+  const solanaAddress = ed25519PublicKeyToSolanaAddress(viewingPublicKey)
 
   return {
     full,
@@ -106,6 +86,7 @@ function formatStealthAddress(
     chain,
     spendingKey: spendingPublicKey,
     viewingKey: viewingPublicKey,
+    solanaAddress,
   }
 }
 
@@ -169,8 +150,8 @@ export function useStealth(): UseStealthReturn {
     setError(null)
 
     try {
-      // Generate new stealth keys
-      const newKeys = generateStealthKeys()
+      // Generate new stealth keys using real cryptography
+      const newKeys = await generateStealthKeys()
 
       // Store securely
       await SecureStore.setItemAsync(SECURE_STORE_KEY, JSON.stringify(newKeys))
@@ -229,8 +210,8 @@ export function useStealth(): UseStealthReturn {
 
   const formatForDisplay = useCallback((addr: StealthAddress): string => {
     // Truncate for display
-    const spendingShort = `${addr.spendingKey.slice(0, 8)}...${addr.spendingKey.slice(-6)}`
-    const viewingShort = `${addr.viewingKey.slice(0, 8)}...${addr.viewingKey.slice(-6)}`
+    const spendingShort = `${addr.spendingKey.slice(0, 10)}...${addr.spendingKey.slice(-6)}`
+    const viewingShort = `${addr.viewingKey.slice(0, 10)}...${addr.viewingKey.slice(-6)}`
     return `sip:${addr.chain}:${spendingShort}:${viewingShort}`
   }, [])
 

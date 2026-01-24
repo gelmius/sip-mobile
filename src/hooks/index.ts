@@ -6,6 +6,8 @@
 export { useMWA } from "./useMWA"
 export { usePhantomDeeplink } from "./usePhantomDeeplink"
 export { useWallet, getRecommendedProvider, getAvailableProviders } from "./useWallet"
+export { useBalance } from "./useBalance"
+export type { UseBalanceReturn } from "./useBalance"
 
 // Privacy hooks
 export { useStealth } from "./useStealth"
@@ -36,6 +38,7 @@ export type {
   QuoteParams,
   QuoteFreshness,
   QuoteResult,
+  JupiterQuoteResponse,
 } from "./useQuote"
 
 export {

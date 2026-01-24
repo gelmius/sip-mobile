@@ -16,7 +16,12 @@ import { useState, useCallback, useRef, useMemo } from "react"
 import * as SecureStore from "expo-secure-store"
 import { usePrivacyStore } from "@/stores/privacy"
 import { useWalletStore } from "@/stores/wallet"
+import { useSettingsStore } from "@/stores/settings"
 import type { PaymentRecord, PrivacyLevel } from "@/types"
+import {
+  checkStealthAddress,
+  type StealthAddress,
+} from "@/lib/stealth"
 
 // ============================================================================
 // TYPES
@@ -116,15 +121,41 @@ function generateRandomHex(length: number): string {
 }
 
 /**
- * Mock check if announcement belongs to user
- * In production, this uses ECDH with viewing key
+ * Check if an announcement belongs to the user using real cryptographic verification
+ *
+ * Uses the stealth library's checkStealthAddress which performs:
+ * 1. ECDH with spending private key and ephemeral public key
+ * 2. Hash the shared secret
+ * 3. Quick view tag check
+ * 4. Full derivation and comparison if view tag matches
+ *
+ * Note: In mock mode, we fallback to the pre-set flag since mock announcements
+ * don't have valid cryptographic keys.
  */
 function checkAnnouncementOwnership(
-  _announcement: MockAnnouncement,
-  _viewingPrivateKey: string
+  announcement: MockAnnouncement,
+  spendingPrivateKey: string,
+  viewingPrivateKey: string,
+  useMock: boolean = true // Remove this flag when using real indexer
 ): boolean {
-  // Mock: use the pre-set flag
-  return _announcement.stealthAddress === "MATCH"
+  // Mock mode: use pre-set flag
+  if (useMock) {
+    return announcement.stealthAddress === "MATCH"
+  }
+
+  // Real mode: use cryptographic verification
+  try {
+    const stealthAddr: StealthAddress = {
+      address: announcement.stealthAddress,
+      ephemeralPublicKey: announcement.ephemeralPubKey,
+      viewTag: parseInt(announcement.ephemeralPubKey.slice(2, 4), 16), // Extract view tag
+    }
+
+    return checkStealthAddress(stealthAddr, spendingPrivateKey, viewingPrivateKey)
+  } catch (err) {
+    console.error("Failed to check announcement ownership:", err)
+    return false
+  }
 }
 
 // ============================================================================
@@ -194,10 +225,10 @@ export function useScanPayments(): UseScanPaymentsReturn {
         }
 
         const keys = JSON.parse(storedKeys)
-        const viewingPrivateKey = keys.viewingPrivateKey
+        const { viewingPrivateKey, spendingPrivateKey } = keys
 
-        if (!viewingPrivateKey) {
-          throw new Error("Viewing key not found")
+        if (!viewingPrivateKey || !spendingPrivateKey) {
+          throw new Error("Stealth keys not found")
         }
 
         // Check for cancellation
@@ -268,10 +299,12 @@ export function useScanPayments(): UseScanPaymentsReturn {
               continue
             }
 
-            // Check ownership using viewing key
+            // Check ownership using stealth keys
             const isOurs = checkAnnouncementOwnership(
               announcement,
-              viewingPrivateKey
+              spendingPrivateKey,
+              viewingPrivateKey,
+              true // Use mock mode until real indexer is available
             )
 
             if (isOurs) {

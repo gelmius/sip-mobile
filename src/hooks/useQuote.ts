@@ -2,15 +2,15 @@
  * Quote Hook for Jupiter DEX
  *
  * Fetches and manages swap quotes with:
+ * - Real Jupiter Quote API v6 integration
  * - Auto-refresh to keep quotes fresh
  * - Freshness tracking (fresh/stale/expired)
  * - Countdown timer for expiry
- * - Mock implementation (to be replaced with real Jupiter API)
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import type { TokenInfo, SwapQuote, PrivacyLevel } from "@/types"
-import { getMockBalance } from "@/data/tokens"
+import { useBalance } from "./useBalance"
 
 // ============================================================================
 // TYPES
@@ -29,6 +29,8 @@ export type QuoteFreshness = "fresh" | "stale" | "expired"
 export interface QuoteResult {
   /** The swap quote */
   quote: SwapQuote | null
+  /** Raw Jupiter quote response (for swap execution) */
+  jupiterQuote: JupiterQuoteResponse | null
   /** Whether quote is loading */
   isLoading: boolean
   /** Error message if any */
@@ -47,9 +49,40 @@ export interface QuoteResult {
   refresh: () => Promise<void>
 }
 
+/** Jupiter Quote API response */
+export interface JupiterQuoteResponse {
+  inputMint: string
+  inAmount: string
+  outputMint: string
+  outAmount: string
+  otherAmountThreshold: string
+  swapMode: string
+  slippageBps: number
+  platformFee: null | { amount: string; feeBps: number }
+  priceImpactPct: string
+  routePlan: Array<{
+    swapInfo: {
+      ammKey: string
+      label: string
+      inputMint: string
+      outputMint: string
+      inAmount: string
+      outAmount: string
+      feeAmount: string
+      feeMint: string
+    }
+    percent: number
+  }>
+  contextSlot: number
+  timeTaken: number
+}
+
 // ============================================================================
 // CONSTANTS
 // ============================================================================
+
+/** Jupiter Quote API endpoint */
+const JUPITER_QUOTE_API = "https://quote-api.jup.ag/v6/quote"
 
 /** Quote is fresh for 30 seconds */
 const QUOTE_FRESH_DURATION = 30_000
@@ -66,77 +99,124 @@ const AUTO_REFRESH_INTERVAL = 25_000
 /** Debounce time for param changes */
 const DEBOUNCE_MS = 500
 
-// Mock price data (will be replaced with real Jupiter prices)
-const TOKEN_PRICES: Record<string, number> = {
-  SOL: 185.5,
-  USDC: 1.0,
-  USDT: 1.0,
-  BONK: 0.000025,
-  JUP: 0.75,
-  RAY: 2.1,
-  PYTH: 0.35,
-  WIF: 1.85,
-  JTO: 2.8,
-  ORCA: 3.5,
-}
-
 // ============================================================================
 // HELPERS
 // ============================================================================
 
 /**
- * Calculate mock quote data
- * TODO: Replace with real Jupiter API call
+ * Fetch quote from Jupiter API
  */
-function calculateMockQuote(
+async function fetchJupiterQuote(
   fromToken: TokenInfo,
   toToken: TokenInfo,
   amount: string,
-  slippage: number,
+  slippageBps: number
+): Promise<JupiterQuoteResponse> {
+  // Convert amount to lamports/smallest unit
+  const inputAmount = parseFloat(amount)
+  if (isNaN(inputAmount) || inputAmount <= 0) {
+    throw new Error("Invalid amount")
+  }
+
+  const amountInSmallestUnit = Math.floor(inputAmount * Math.pow(10, fromToken.decimals))
+
+  const params = new URLSearchParams({
+    inputMint: fromToken.mint,
+    outputMint: toToken.mint,
+    amount: amountInSmallestUnit.toString(),
+    slippageBps: slippageBps.toString(),
+    swapMode: "ExactIn",
+  })
+
+  const response = await fetch(`${JUPITER_QUOTE_API}?${params}`)
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Jupiter API error: ${errorText}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Convert Jupiter quote to our SwapQuote interface
+ */
+function jupiterToSwapQuote(
+  jupiterQuote: JupiterQuoteResponse,
+  fromToken: TokenInfo,
+  toToken: TokenInfo,
+  inputAmount: string,
   privacyLevel: PrivacyLevel
 ): SwapQuote {
-  const inputAmount = parseFloat(amount) || 0
-  const fromPrice = TOKEN_PRICES[fromToken.symbol] || 1
-  const toPrice = TOKEN_PRICES[toToken.symbol] || 1
+  // Convert output amount from smallest unit
+  const outAmountNum = parseInt(jupiterQuote.outAmount, 10) / Math.pow(10, toToken.decimals)
+  const outputAmount = outAmountNum.toFixed(toToken.decimals > 6 ? 4 : 6)
 
-  // Calculate output based on price ratio
-  const rawOutput = (inputAmount * fromPrice) / toPrice
-  const outputAmount = rawOutput.toFixed(toToken.decimals > 6 ? 4 : 6)
+  // Convert minimum received (otherAmountThreshold)
+  const minReceivedNum = parseInt(jupiterQuote.otherAmountThreshold, 10) / Math.pow(10, toToken.decimals)
+  const minimumReceived = minReceivedNum.toFixed(toToken.decimals > 6 ? 4 : 6)
 
-  // Calculate minimum received with slippage
-  const minReceived = rawOutput * (1 - slippage / 100)
-  const minimumReceived = minReceived.toFixed(toToken.decimals > 6 ? 4 : 6)
+  // Parse price impact
+  const priceImpact = parseFloat(jupiterQuote.priceImpactPct)
 
-  // Price impact increases with larger amounts
-  const priceImpact =
-    inputAmount > 1000 ? 0.5 : inputAmount > 100 ? 0.15 : inputAmount > 10 ? 0.05 : 0.01
-
-  // Build route (direct or via SOL)
-  const route =
-    fromToken.symbol === "SOL" || toToken.symbol === "SOL"
-      ? [fromToken.symbol, toToken.symbol]
-      : [fromToken.symbol, "SOL", toToken.symbol]
+  // Build route from routePlan
+  const route = buildRouteFromPlan(jupiterQuote.routePlan, fromToken, toToken)
 
   // Network fee estimate (base + privacy premium)
   const baseFee = 0.000005 // ~5000 lamports
   const privacyPremium = privacyLevel === "shielded" ? 0.00001 : 0
   const networkFee = (baseFee + privacyPremium).toFixed(6)
 
+  // Platform fee from Jupiter response
+  const platformFee = jupiterQuote.platformFee
+    ? (parseInt(jupiterQuote.platformFee.amount, 10) / Math.pow(10, toToken.decimals)).toFixed(6)
+    : "0"
+
   return {
     inputToken: fromToken,
     outputToken: toToken,
-    inputAmount: amount,
+    inputAmount,
     outputAmount,
     minimumReceived,
     priceImpact,
     route,
     fees: {
       networkFee,
-      platformFee: "0", // No platform fee for now
+      platformFee,
     },
-    estimatedTime: privacyLevel === "shielded" ? 8 : 5, // seconds
+    estimatedTime: privacyLevel === "shielded" ? 8 : 5,
     expiresAt: Date.now() + QUOTE_EXPIRY_DURATION,
   }
+}
+
+/**
+ * Build human-readable route from Jupiter route plan
+ */
+function buildRouteFromPlan(
+  routePlan: JupiterQuoteResponse["routePlan"],
+  fromToken: TokenInfo,
+  toToken: TokenInfo
+): string[] {
+  if (!routePlan || routePlan.length === 0) {
+    return [fromToken.symbol, toToken.symbol]
+  }
+
+  // For simple routes, just show from -> to
+  if (routePlan.length === 1) {
+    return [fromToken.symbol, toToken.symbol]
+  }
+
+  // For multi-hop routes, show the intermediary (simplified)
+  // Jupiter uses AMM labels, but we just show token symbols
+  const route = [fromToken.symbol]
+
+  // Add intermediate tokens if multi-hop
+  if (routePlan.length > 1) {
+    route.push("...") // Indicate multi-hop
+  }
+
+  route.push(toToken.symbol)
+  return route
 }
 
 /**
@@ -186,6 +266,7 @@ function getQuoteErrorMessage(err: unknown): string {
  */
 export function useQuote(params: QuoteParams | null): QuoteResult {
   const [quote, setQuote] = useState<SwapQuote | null>(null)
+  const [jupiterQuote, setJupiterQuote] = useState<JupiterQuoteResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fetchedAt, setFetchedAt] = useState<number | null>(null)
@@ -203,6 +284,7 @@ export function useQuote(params: QuoteParams | null): QuoteResult {
     // Skip if no params or invalid amount
     if (!params || !params.amount || parseFloat(params.amount) <= 0) {
       setQuote(null)
+      setJupiterQuote(null)
       setError(null)
       setFreshness("expired")
       setExpiresIn(null)
@@ -213,15 +295,26 @@ export function useQuote(params: QuoteParams | null): QuoteResult {
     setError(null)
 
     try {
-      // Simulate network delay
-      await new Promise((resolve) => setTimeout(resolve, 300))
+      // Convert slippage from percentage to basis points (0.5% -> 50 bps)
+      const slippageBps = Math.round(params.slippage * 100)
 
-      // Calculate mock quote (will be replaced with Jupiter API)
-      const newQuote = calculateMockQuote(
+      // Fetch real quote from Jupiter
+      const jupQuote = await fetchJupiterQuote(
         params.fromToken,
         params.toToken,
         params.amount,
-        params.slippage,
+        slippageBps
+      )
+
+      // Store raw Jupiter quote for swap execution
+      setJupiterQuote(jupQuote)
+
+      // Convert to our SwapQuote interface
+      const newQuote = jupiterToSwapQuote(
+        jupQuote,
+        params.fromToken,
+        params.toToken,
+        params.amount,
         params.privacyLevel
       )
 
@@ -233,6 +326,7 @@ export function useQuote(params: QuoteParams | null): QuoteResult {
       const errorMessage = getQuoteErrorMessage(err)
       setError(errorMessage)
       setQuote(null)
+      setJupiterQuote(null)
       setFreshness("expired")
       setExpiresIn(null)
     } finally {
@@ -330,6 +424,7 @@ export function useQuote(params: QuoteParams | null): QuoteResult {
 
   return {
     quote,
+    jupiterQuote,
     isLoading,
     error,
     freshness,
@@ -346,19 +441,52 @@ export function useQuote(params: QuoteParams | null): QuoteResult {
 // ============================================================================
 
 /**
- * Hook to get exchange rate between two tokens
+ * Hook to get exchange rate between two tokens using Jupiter Price API
  */
 export function useExchangeRate(
-  fromSymbol: string,
-  toSymbol: string
-): { rate: number; formatted: string } {
-  return useMemo(() => {
-    const fromPrice = TOKEN_PRICES[fromSymbol] || 1
-    const toPrice = TOKEN_PRICES[toSymbol] || 1
-    const rate = fromPrice / toPrice
-    const formatted = rate >= 1 ? rate.toFixed(4) : rate.toFixed(8)
-    return { rate, formatted }
-  }, [fromSymbol, toSymbol])
+  fromToken: TokenInfo | null,
+  toToken: TokenInfo | null
+): { rate: number; formatted: string; isLoading: boolean } {
+  const [rate, setRate] = useState(0)
+  const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    if (!fromToken || !toToken) {
+      setRate(0)
+      return
+    }
+
+    const fetchRate = async () => {
+      setIsLoading(true)
+      try {
+        // Use Jupiter Price API for real-time rates
+        const response = await fetch(
+          `https://price.jup.ag/v6/price?ids=${fromToken.mint},${toToken.mint}`
+        )
+        if (response.ok) {
+          const data = await response.json()
+          const fromPrice = data.data[fromToken.mint]?.price || 0
+          const toPrice = data.data[toToken.mint]?.price || 0
+          if (fromPrice > 0 && toPrice > 0) {
+            setRate(fromPrice / toPrice)
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch exchange rate:", err)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchRate()
+  }, [fromToken?.mint, toToken?.mint])
+
+  const formatted = useMemo(() => {
+    if (rate === 0) return "..."
+    return rate >= 1 ? rate.toFixed(4) : rate.toFixed(8)
+  }, [rate])
+
+  return { rate, formatted, isLoading }
 }
 
 /**
@@ -368,10 +496,22 @@ export function useInsufficientBalance(
   tokenSymbol: string,
   amount: string
 ): boolean {
+  const { balance, tokenBalances } = useBalance()
+
   return useMemo(() => {
     if (!amount || parseFloat(amount) <= 0) return false
-    const balance = getMockBalance(tokenSymbol)
-    if (!balance) return true
-    return parseFloat(amount) > parseFloat(balance.balance)
-  }, [tokenSymbol, amount])
+
+    const amountNum = parseFloat(amount)
+
+    // Check SOL balance
+    if (tokenSymbol === "SOL") {
+      return amountNum > balance
+    }
+
+    // Check SPL token balance
+    const tokenBalance = tokenBalances.find((t) => t.symbol === tokenSymbol)
+    if (!tokenBalance) return true
+
+    return amountNum > tokenBalance.uiAmount
+  }, [tokenSymbol, amount, balance, tokenBalances])
 }

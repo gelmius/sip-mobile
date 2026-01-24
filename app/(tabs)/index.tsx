@@ -10,16 +10,23 @@
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { router } from "expo-router"
-import { useState, useCallback } from "react"
+import { useCallback, useState } from "react"
 import { useWalletStore, formatAddress } from "@/stores/wallet"
 import { usePrivacyStore } from "@/stores/privacy"
 import { useClaim } from "@/hooks/useClaim"
+import { useBalance } from "@/hooks/useBalance"
 import { AccountIndicator } from "@/components/AccountSwitcher"
+import {
+  ShieldCheck,
+  ClockCounterClockwise,
+  Key,
+  Coins,
+  ArrowDown,
+  ArrowUp,
+} from "phosphor-react-native"
+import type { IconProps } from "phosphor-react-native"
+import type { ComponentType } from "react"
 import type { PaymentRecord } from "@/types"
-
-// Mock balance for demo
-const MOCK_BALANCE = 12.45
-const MOCK_USD_BALANCE = 2308.12
 
 // ============================================================================
 // HELPERS
@@ -62,7 +69,7 @@ function getStatusColor(status: PaymentRecord["status"]): string {
 // ============================================================================
 
 interface QuickActionProps {
-  icon: string
+  Icon: ComponentType<IconProps>
   label: string
   sublabel: string
   variant?: "primary" | "default"
@@ -70,7 +77,7 @@ interface QuickActionProps {
 }
 
 function QuickAction({
-  icon,
+  Icon,
   label,
   sublabel,
   variant = "default",
@@ -85,7 +92,11 @@ function QuickAction({
       }`}
       onPress={onPress}
     >
-      <Text className="text-2xl">{icon}</Text>
+      <Icon
+        size={28}
+        weight="duotone"
+        color={variant === "primary" ? "#a78bfa" : "#e4e4e7"}
+      />
       <Text
         className={`mt-2 font-medium ${
           variant === "primary" ? "text-brand-400" : "text-white"
@@ -116,7 +127,11 @@ function TransactionRow({ payment, onPress }: TransactionRowProps) {
           isReceive ? "bg-green-900/30" : "bg-brand-900/30"
         }`}
       >
-        <Text className="text-lg">{isReceive ? "↓" : "↑"}</Text>
+        {isReceive ? (
+          <ArrowDown size={20} weight="bold" color="#4ade80" />
+        ) : (
+          <ArrowUp size={20} weight="bold" color="#a78bfa" />
+        )}
       </View>
       <View className="flex-1 ml-3">
         <Text className="text-white font-medium">
@@ -149,6 +164,7 @@ export default function HomeScreen() {
   const { isConnected, address } = useWalletStore()
   const { payments } = usePrivacyStore()
   const { getClaimableAmount } = useClaim()
+  const { balance, usdValue, isLoading: balanceLoading, refresh: refreshBalance } = useBalance()
   const [refreshing, setRefreshing] = useState(false)
 
   // Get recent payments (last 5)
@@ -157,9 +173,9 @@ export default function HomeScreen() {
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    await refreshBalance()
     setRefreshing(false)
-  }, [])
+  }, [refreshBalance])
 
   const handleTransactionPress = useCallback((payment: PaymentRecord) => {
     router.push(`/history/${payment.id}`)
@@ -206,10 +222,10 @@ export default function HomeScreen() {
           {isConnected ? (
             <>
               <Text className="text-4xl font-bold text-white mt-2">
-                {MOCK_BALANCE.toFixed(4)} SOL
+                {balanceLoading ? "..." : balance.toFixed(4)} SOL
               </Text>
               <Text className="text-dark-500 mt-1">
-                ≈ ${MOCK_USD_BALANCE.toLocaleString()}
+                ≈ ${usdValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}
               </Text>
               <View className="flex-row items-center mt-3 pt-3 border-t border-dark-800">
                 <Text className="text-dark-500 text-sm">
@@ -234,20 +250,20 @@ export default function HomeScreen() {
         {/* Quick Actions */}
         <View className="flex-row mt-6 gap-3">
           <QuickAction
-            icon="🔒"
+            Icon={ShieldCheck}
             label="Private"
             sublabel="Shield funds"
             variant="primary"
             onPress={() => router.push("/(tabs)/send")}
           />
           <QuickAction
-            icon="📊"
+            Icon={ClockCounterClockwise}
             label="History"
             sublabel="View activity"
             onPress={() => router.push("/history")}
           />
           <QuickAction
-            icon="🔑"
+            Icon={Key}
             label="Keys"
             sublabel="Manage keys"
             onPress={() => router.push("/settings/viewing-keys")}
@@ -261,7 +277,7 @@ export default function HomeScreen() {
             onPress={() => router.push("/claim")}
           >
             <View className="w-12 h-12 bg-green-900/30 rounded-full items-center justify-center">
-              <Text className="text-2xl">💰</Text>
+              <Coins size={24} weight="duotone" color="#4ade80" />
             </View>
             <View className="flex-1 ml-3">
               <Text className="text-green-400 font-semibold">
@@ -271,7 +287,7 @@ export default function HomeScreen() {
                 {unclaimedAmount.toFixed(4)} SOL ready to claim
               </Text>
             </View>
-            <Text className="text-green-400 text-2xl">→</Text>
+            <ArrowDown size={24} weight="bold" color="#4ade80" style={{ transform: [{ rotate: '-90deg' }] }} />
           </TouchableOpacity>
         )}
 

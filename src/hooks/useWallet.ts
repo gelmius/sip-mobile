@@ -271,13 +271,26 @@ export function useWallet(): UseWalletReturn {
       try {
         switch (activeProvider) {
           case "privy": {
-            // Privy embedded wallet signing requires getProvider()
-            // TODO: Implement proper Privy signing with PrivyEmbeddedSolanaWalletProvider
             if (embeddedWallet.status !== "connected" || embeddedWallet.wallets.length === 0) {
               throw new Error("Embedded wallet not available")
             }
-            // For now, throw not implemented
-            throw new Error("Privy message signing not yet implemented - use MWA or Phantom")
+
+            // Get the provider from the embedded wallet
+            const wallet = embeddedWallet.wallets[0]
+            const provider = await wallet.getProvider()
+
+            // Convert message to string for signing (Privy expects string)
+            const messageStr = new TextDecoder().decode(message)
+
+            // Sign using Privy provider
+            const { signature } = await provider.request({
+              method: "signMessage",
+              params: { message: messageStr },
+            })
+
+            // Privy returns base64 encoded signature
+            const signatureBytes = Uint8Array.from(atob(signature), (c) => c.charCodeAt(0))
+            return signatureBytes
           }
 
           case "mwa":
@@ -318,13 +331,35 @@ export function useWallet(): UseWalletReturn {
       try {
         switch (activeProvider) {
           case "privy": {
-            // Privy uses different transaction signing API
             if (embeddedWallet.status !== "connected" || embeddedWallet.wallets.length === 0) {
               throw new Error("Embedded wallet not available")
             }
-            // Note: Privy transaction signing requires specific format
-            // This is a simplified implementation
-            throw new Error("Privy transaction signing not yet implemented")
+
+            // Get the provider from the embedded wallet
+            const wallet = embeddedWallet.wallets[0]
+            const provider = await wallet.getProvider()
+
+            // Deserialize the transaction
+            const { Transaction, VersionedTransaction } = await import("@solana/web3.js")
+            let tx: InstanceType<typeof Transaction> | InstanceType<typeof VersionedTransaction>
+            try {
+              tx = VersionedTransaction.deserialize(serializedTx)
+            } catch {
+              tx = Transaction.from(serializedTx)
+            }
+
+            // Sign using Privy provider
+            const { signedTransaction } = await provider.request({
+              method: "signTransaction",
+              params: { transaction: tx },
+            })
+
+            // Return the signed transaction bytes
+            if (signedTransaction instanceof VersionedTransaction) {
+              return signedTransaction.serialize()
+            } else {
+              return signedTransaction.serialize()
+            }
           }
 
           case "mwa": {

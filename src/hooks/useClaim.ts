@@ -9,10 +9,17 @@
  */
 
 import { useState, useCallback, useMemo } from "react"
+import { Buffer } from "buffer"
 import * as SecureStore from "expo-secure-store"
 import { usePrivacyStore } from "@/stores/privacy"
 import { useWalletStore } from "@/stores/wallet"
+import { useSettingsStore } from "@/stores/settings"
 import type { PaymentRecord } from "@/types"
+import {
+  deriveStealthPrivateKey,
+  hexToBytes,
+  type StealthAddress,
+} from "@/lib/stealth"
 
 // ============================================================================
 // TYPES
@@ -65,53 +72,117 @@ const CLAIM_STEPS = 4
 // HELPERS
 // ============================================================================
 
-function generateRandomHex(length: number): string {
-  const array = new Uint8Array(length)
-  for (let i = 0; i < length; i++) {
-    array[i] = Math.floor(Math.random() * 256)
+/**
+ * Parse a stealth address string into StealthAddress components
+ * Format: sip:solana:<ephemeralPubKey>:derived or just the address
+ */
+function parsePaymentStealthAddress(addressStr: string | undefined): StealthAddress | null {
+  if (!addressStr) return null
+
+  // Try to parse SIP format: sip:solana:<ephemeral>:derived
+  if (addressStr.startsWith("sip:")) {
+    const parts = addressStr.split(":")
+    if (parts.length >= 3) {
+      const ephemeralPubKey = parts[2]
+      // Derive view tag from ephemeral key (first byte of hash)
+      const viewTag = parseInt(ephemeralPubKey.slice(2, 4), 16)
+      return {
+        address: parts[3] || "", // May not have actual address
+        ephemeralPublicKey: ephemeralPubKey.startsWith("0x") ? ephemeralPubKey : `0x${ephemeralPubKey}`,
+        viewTag,
+      }
+    }
   }
-  return Array.from(array)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("")
+
+  return null
 }
 
 /**
- * Mock derive spending key from stealth address
- * In production: ECDH(viewingPrivKey, ephemeralPubKey) + spendingPrivKey
+ * Derive the stealth private key using real cryptographic operations
+ *
+ * Uses DKSAP (Dual-Key Stealth Address Protocol):
+ * 1. Compute shared secret: S = spending_scalar * ephemeral_pubkey
+ * 2. Hash the shared secret
+ * 3. Derive: stealth_private = viewing_scalar + hash(S) mod L
  */
-async function deriveSpendingKey(
-  _stealthAddress: string,
-  _viewingPrivateKey: string,
-  _spendingPrivateKey: string
-): Promise<string> {
-  // Simulate derivation delay
-  await new Promise((resolve) => setTimeout(resolve, 300))
-  return generateRandomHex(32)
+async function deriveSpendingKeyFromPayment(
+  payment: PaymentRecord,
+  spendingPrivateKey: string,
+  viewingPrivateKey: string
+): Promise<string | null> {
+  const stealthAddr = parsePaymentStealthAddress(payment.stealthAddress)
+  if (!stealthAddr || !stealthAddr.ephemeralPublicKey) {
+    console.error("Invalid stealth address format")
+    return null
+  }
+
+  try {
+    // Use real cryptographic key derivation
+    const derivedKey = deriveStealthPrivateKey(
+      stealthAddr,
+      spendingPrivateKey,
+      viewingPrivateKey
+    )
+    return derivedKey
+  } catch (err) {
+    console.error("Failed to derive stealth private key:", err)
+    return null
+  }
 }
 
 /**
- * Mock sign claim transaction
- * In production: Sign with derived spending key
+ * Build and sign the claim transaction
+ *
+ * In production, this builds a Solana transaction that:
+ * 1. Transfers funds from the stealth address to the user's wallet
+ * 2. Signs with the derived stealth private key
  */
-async function signClaimTransaction(
-  _payment: PaymentRecord,
-  _derivedKey: string
-): Promise<Uint8Array> {
-  // Simulate signing delay
+async function buildClaimTransaction(
+  payment: PaymentRecord,
+  derivedKey: string,
+  destinationAddress: string,
+  _network: string
+): Promise<{ serialized: Uint8Array; signature: string }> {
+  // TODO: Build actual Solana transaction when on-chain program is ready
+  // For now, simulate the transaction building
+
+  // Simulate building delay
   await new Promise((resolve) => setTimeout(resolve, 300))
-  return new Uint8Array(64).fill(1)
+
+  // Mock transaction signature (will be real ed25519 sig in production)
+  const mockSig = new Uint8Array(64)
+  const derivedKeyBytes = hexToBytes(derivedKey)
+  mockSig.set(derivedKeyBytes.slice(0, 32), 0)
+
+  return {
+    serialized: new Uint8Array(512).fill(0), // Mock serialized tx
+    signature: Array.from(mockSig.slice(0, 32))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join(""),
+  }
 }
 
 /**
- * Mock submit claim transaction
- * In production: Submit to Solana network
+ * Submit claim transaction to the Solana network
+ *
+ * TODO: Implement real RPC submission when on-chain program is ready
  */
 async function submitClaimTransaction(
-  _signature: Uint8Array
+  _serializedTx: Uint8Array,
+  _network: string
 ): Promise<string> {
   // Simulate network delay
   await new Promise((resolve) => setTimeout(resolve, 800))
-  return generateRandomHex(64)
+
+  // Generate mock transaction hash (will be real in production)
+  const mockTxHash = new Uint8Array(32)
+  for (let i = 0; i < 32; i++) {
+    mockTxHash[i] = Math.floor(Math.random() * 256)
+  }
+
+  return Array.from(mockTxHash)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
 }
 
 // ============================================================================
@@ -120,6 +191,7 @@ async function submitClaimTransaction(
 
 export function useClaim(): UseClaimReturn {
   const { isConnected, address: walletAddress } = useWalletStore()
+  const { network } = useSettingsStore()
   const { payments, updatePayment } = usePrivacyStore()
 
   const [progress, setProgress] = useState<ClaimProgress>({
@@ -167,7 +239,7 @@ export function useClaim(): UseClaimReturn {
           throw new Error("Invalid stealth keys")
         }
 
-        // Step 2: Derive spending key
+        // Step 2: Derive spending key using real cryptographic operations
         setProgress({
           status: "deriving",
           message: "Deriving spending key...",
@@ -175,21 +247,30 @@ export function useClaim(): UseClaimReturn {
           totalSteps: CLAIM_STEPS,
         })
 
-        const derivedKey = await deriveSpendingKey(
-          payment.stealthAddress || "",
-          viewingPrivateKey,
-          spendingPrivateKey
+        const derivedKey = await deriveSpendingKeyFromPayment(
+          payment,
+          spendingPrivateKey,
+          viewingPrivateKey
         )
 
-        // Step 3: Sign transaction
+        if (!derivedKey) {
+          throw new Error("Failed to derive spending key - invalid stealth address")
+        }
+
+        // Step 3: Build and sign claim transaction
         setProgress({
           status: "signing",
-          message: "Signing claim transaction...",
+          message: "Building claim transaction...",
           step: 3,
           totalSteps: CLAIM_STEPS,
         })
 
-        const signature = await signClaimTransaction(payment, derivedKey)
+        const { serialized } = await buildClaimTransaction(
+          payment,
+          derivedKey,
+          walletAddress,
+          network
+        )
 
         // Step 4: Submit transaction
         setProgress({
@@ -199,7 +280,7 @@ export function useClaim(): UseClaimReturn {
           totalSteps: CLAIM_STEPS,
         })
 
-        const txHash = await submitClaimTransaction(signature)
+        const txHash = await submitClaimTransaction(serialized, network)
 
         // Update payment status
         updatePayment(payment.id, {

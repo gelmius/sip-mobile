@@ -1,18 +1,29 @@
 import { Tabs } from 'expo-router'
 import { View, Text } from 'react-native'
+import {
+  House,
+  PaperPlaneTilt,
+  Download,
+  ArrowsLeftRight,
+  GearSix,
+} from 'phosphor-react-native'
+import type { IconProps } from 'phosphor-react-native'
+import type { ComponentType } from 'react'
 
 type TabIconProps = {
   focused: boolean
   label: string
-  icon: string
+  Icon: ComponentType<IconProps>
 }
 
-function TabIcon({ focused, label, icon }: TabIconProps) {
+function TabIcon({ focused, label, Icon }: TabIconProps) {
   return (
     <View className="items-center justify-center">
-      <Text className={`text-2xl ${focused ? 'opacity-100' : 'opacity-50'}`}>
-        {icon}
-      </Text>
+      <Icon
+        size={24}
+        weight={focused ? 'fill' : 'regular'}
+        color={focused ? '#8b5cf6' : '#71717a'}
+      />
       <Text
         className={`text-xs mt-1 ${
           focused ? 'text-brand-500 font-medium' : 'text-dark-400'
@@ -43,7 +54,7 @@ export default function TabsLayout() {
         name="index"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon focused={focused} label="Home" icon="🏠" />
+            <TabIcon focused={focused} label="Home" Icon={House} />
           ),
         }}
       />
@@ -51,7 +62,7 @@ export default function TabsLayout() {
         name="send"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon focused={focused} label="Send" icon="↗️" />
+            <TabIcon focused={focused} label="Send" Icon={PaperPlaneTilt} />
           ),
         }}
       />
@@ -59,7 +70,7 @@ export default function TabsLayout() {
         name="receive"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon focused={focused} label="Receive" icon="↙️" />
+            <TabIcon focused={focused} label="Receive" Icon={Download} />
           ),
         }}
       />
@@ -67,7 +78,7 @@ export default function TabsLayout() {
         name="swap"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon focused={focused} label="Swap" icon="🔄" />
+            <TabIcon focused={focused} label="Swap" Icon={ArrowsLeftRight} />
           ),
         }}
       />
@@ -75,7 +86,7 @@ export default function TabsLayout() {
         name="settings"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon focused={focused} label="Settings" icon="⚙️" />
+            <TabIcon focused={focused} label="Settings" Icon={GearSix} />
           ),
         }}
       />

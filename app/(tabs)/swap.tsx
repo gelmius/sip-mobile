@@ -339,6 +339,7 @@ export default function SwapScreen() {
     error: quoteError,
     freshness,
     expiresIn,
+    jupiterQuote,
     refresh: refreshQuote,
   } = useQuote(quoteParams)
 
@@ -416,7 +417,7 @@ export default function SwapScreen() {
   }
 
   const confirmSwap = async () => {
-    if (!quote) return
+    if (!quote || !jupiterQuote) return
 
     setShowConfirmModal(false)
     setShowExecutingModal(true)
@@ -425,6 +426,7 @@ export default function SwapScreen() {
     // Execute the swap
     const success = await executeSwap({
       quote,
+      jupiterQuote,
       privacyLevel,
     })
 

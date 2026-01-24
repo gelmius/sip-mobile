@@ -26,11 +26,9 @@ import { router } from "expo-router"
 import { useSend } from "@/hooks/useSend"
 import { useWalletStore } from "@/stores/wallet"
 import { useToastStore } from "@/stores/toast"
+import { useBalance } from "@/hooks/useBalance"
 import { Button, Modal } from "@/components/ui"
 import type { PrivacyLevel } from "@/types"
-
-// Mock balance for demo
-const MOCK_BALANCE = 12.45
 
 export default function SendScreen() {
   const {
@@ -46,6 +44,7 @@ export default function SendScreen() {
   } = useSend()
   const { isConnected } = useWalletStore()
   const { addToast } = useToastStore()
+  const { balance } = useBalance()
 
   const [amount, setAmount] = useState("")
   const [recipient, setRecipient] = useState("")
@@ -72,7 +71,7 @@ export default function SendScreen() {
 
       setAmount(value)
       if (value) {
-        const validation = validateAmount(value, MOCK_BALANCE)
+        const validation = validateAmount(value, balance)
         setAmountError(validation.isValid ? null : validation.error || null)
       } else {
         setAmountError(null)
@@ -95,7 +94,7 @@ export default function SendScreen() {
   )
 
   const handleMaxAmount = useCallback(() => {
-    const maxAmount = (MOCK_BALANCE - 0.001).toFixed(6) // Leave for fees
+    const maxAmount = (balance - 0.001).toFixed(6) // Leave for fees
     setAmount(maxAmount)
     setAmountError(null)
   }, [])
@@ -110,7 +109,7 @@ export default function SendScreen() {
       return
     }
 
-    const amtValidation = validateAmount(amount, MOCK_BALANCE)
+    const amtValidation = validateAmount(amount, balance)
     if (!amtValidation.isValid) {
       setAmountError(amtValidation.error || "Invalid amount")
       return
@@ -206,11 +205,11 @@ export default function SendScreen() {
               <View>
                 <Text className="text-dark-500 text-sm">Available Balance</Text>
                 <Text className="text-white text-xl font-bold mt-0.5">
-                  {MOCK_BALANCE.toFixed(4)} SOL
+                  {balance.toFixed(4)} SOL
                 </Text>
               </View>
               <Text className="text-dark-400">
-                {getUsdValue(MOCK_BALANCE.toString())}
+                {getUsdValue(balance.toString())}
               </Text>
             </View>
 

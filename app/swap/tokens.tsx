@@ -408,8 +408,8 @@ export default function TokenSelectorScreen() {
         <TouchableOpacity
           className="flex-row items-center justify-center py-3 bg-dark-800 rounded-xl"
           onPress={() => {
-            // TODO: Implement custom token import
-            router.push("/swap/import-token")
+            // TODO: Implement custom token import screen
+            // For now, just show a toast or do nothing
           }}
         >
           <Text className="text-brand-400 font-medium">+ Import Custom Token</Text>
