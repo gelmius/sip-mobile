@@ -2,7 +2,15 @@
  * Custom hooks for SIP Mobile
  */
 
-// Wallet hooks
+// Native Wallet (PRIMARY)
+export { useNativeWallet } from "./useNativeWallet"
+export type {
+  NativeWallet,
+  NativeWalletError,
+  UseNativeWalletReturn,
+} from "./useNativeWallet"
+
+// External Wallet Integration (OPTIONAL)
 export { useMWA } from "./useMWA"
 export { usePhantomDeeplink } from "./usePhantomDeeplink"
 export { useWallet, getRecommendedProvider, getAvailableProviders } from "./useWallet"
