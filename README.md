@@ -1,19 +1,23 @@
-# SIP Mobile
+# SIP Privacy
 
-> Native privacy wallet for iOS, Android & Solana Mobile (Seeker)
+> Privacy-first Solana wallet — native key management + shielded payments
 
 **Live:** Solana dApp Store (App NFT: `2THAY9h4MaxsCtbm2WVj1gn2NMbVN3GUhLQ1EkMvqQby`)
 
 ## Overview
 
-SIP Mobile is the native mobile application for SIP Protocol, bringing cryptographic privacy to iOS, Android, and Solana Mobile devices. Built with Expo SDK 52 and React Native for a truly native experience.
+SIP Privacy is a **standalone privacy wallet** for Solana — not a layer on top of other wallets. Create or import your wallet directly, then send shielded payments with stealth addresses and Pedersen commitments.
+
+Built with Expo SDK 52 for iOS, Android, and Solana Mobile (Seeker).
 
 ## Features
 
+- **Native Wallet** — Create or import wallet directly (seed phrase / private key)
 - **Private Payments** — Send and receive shielded payments with stealth addresses
-- **Wallet Management** — Secure key storage with Expo SecureStore
 - **Private Swaps** — Jupiter DEX integration with privacy toggle
-- **Multi-Wallet Support** — Privy (embedded), MWA (Android), Phantom deeplinks (iOS)
+- **Secure Storage** — Keys protected with SecureStore + biometrics
+- **Seed Vault** — Direct integration on Seeker (no Phantom middleman)
+- **External Wallets** — Optional MWA (Android) & Phantom (iOS) connection
 
 ## Quick Start
 
@@ -53,8 +57,9 @@ sip-mobile/
 - **Styling:** NativeWind 4.0 (Tailwind for RN)
 - **State:** Zustand 5
 - **Navigation:** Expo Router
-- **Crypto:** @noble/curves, @noble/hashes
-- **Storage:** Expo SecureStore
+- **Crypto:** @noble/curves, @noble/hashes, @scure/bip39, @scure/bip32
+- **Storage:** Expo SecureStore (keys), Expo Local Authentication (biometrics)
+- **Privacy:** @sip-protocol/sdk (stealth addresses, Pedersen commitments)
 
 ## Build & Publishing
 
@@ -78,11 +83,21 @@ See [publishing/BUILD-WORKFLOW.md](publishing/BUILD-WORKFLOW.md) for details.
 
 ## Wallet Strategy
 
-| Platform | Primary | Fallback |
-|----------|---------|----------|
-| Android | Mobile Wallet Adapter (MWA) | Privy embedded |
-| iOS | Phantom deeplinks | Privy embedded |
-| All | Privy embedded wallet | — |
+| Platform | Primary | Optional Integration |
+|----------|---------|---------------------|
+| All | **Native Wallet** (built-in) | — |
+| Seeker | Native + Seed Vault | MWA for external wallets |
+| Android | Native Wallet | MWA connection |
+| iOS | Native Wallet | Phantom connection |
+
+### Key Management
+
+```
+Create new wallet    →  BIP39 mnemonic (12/24 words)
+Import seed phrase   →  Standard Solana derivation (m/44'/501'/0'/0')
+Import private key   →  Base58 encoded
+Security             →  SecureStore + biometric authentication
+```
 
 ## Related
 

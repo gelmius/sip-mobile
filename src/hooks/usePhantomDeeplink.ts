@@ -1,11 +1,17 @@
 /**
- * Phantom Deeplink hook for iOS
+ * Phantom Deeplink Hook — OPTIONAL INTEGRATION
  *
- * Connects to Phantom wallet on iOS using deeplinks.
+ * Provides optional connection to Phantom wallet on iOS using deeplinks.
  * Also works on Android as a fallback.
  *
- * Implements proper NaCl encryption as per Phantom's deeplink protocol:
+ * ⚠️ This is now an OPTIONAL integration.
+ * Primary wallet strategy is native key management.
+ *
+ * Implements NaCl encryption per Phantom's deeplink protocol:
  * https://docs.phantom.app/developer-guides/deeplinks
+ *
+ * @see useNativeWallet — Primary wallet hook (TODO: #67)
+ * @see https://github.com/sip-protocol/sip-mobile/issues/61 — Architecture pivot
  */
 
 import { useState, useCallback, useEffect, useRef } from "react"
@@ -156,10 +162,6 @@ export function usePhantomDeeplink(): UsePhantomDeeplinkReturn {
   const dappKeyPair = useRef<DappKeyPair | null>(null)
   const phantomSession = useRef<PhantomSession | null>(null)
 
-  // Pending promise resolver for deeplink callbacks
-  const pendingResolve = useRef<((params: Record<string, string>) => void) | null>(null)
-  const pendingReject = useRef<((error: Error) => void) | null>(null)
-
   // Initialize dApp keypair on first render
   useEffect(() => {
     if (!dappKeyPair.current) {
@@ -179,54 +181,6 @@ export function usePhantomDeeplink(): UsePhantomDeeplinkReturn {
     }
     checkPhantom()
   }, [])
-
-  // Handle deeplink callbacks
-  useEffect(() => {
-    const handleUrl = ({ url }: { url: string }) => {
-      if (!url.startsWith(REDIRECT_URL)) return
-
-      try {
-        const params = parseCallbackUrl(url)
-
-        // Check for errors
-        if (params.errorCode) {
-          const error = new Error(params.errorMessage || "Phantom error")
-          pendingReject.current?.(error)
-          return
-        }
-
-        pendingResolve.current?.(params)
-      } catch (err) {
-        pendingReject.current?.(err instanceof Error ? err : new Error("Parse error"))
-      }
-    }
-
-    const subscription = Linking.addEventListener("url", handleUrl)
-
-    // Check for initial URL (app opened via deeplink)
-    Linking.getInitialURL().then((url) => {
-      if (url) handleUrl({ url })
-    })
-
-    return () => subscription.remove()
-  }, [])
-
-  /**
-   * Wait for Phantom callback via deeplink
-   */
-  const waitForCallback = (): Promise<Record<string, string>> => {
-    return new Promise((resolve, reject) => {
-      pendingResolve.current = resolve
-      pendingReject.current = reject
-
-      // Timeout after 2 minutes
-      setTimeout(() => {
-        pendingResolve.current = null
-        pendingReject.current = null
-        reject(new Error("Phantom connection timeout"))
-      }, 120000)
-    })
-  }
 
   const connect = useCallback(async (): Promise<WalletAccount | null> => {
     if (!isAvailable) {
@@ -256,15 +210,22 @@ export function usePhantomDeeplink(): UsePhantomDeeplinkReturn {
         cluster: network === "mainnet" ? "mainnet-beta" : "devnet",
       })
 
-      // Open Phantom
-      await WebBrowser.openBrowserAsync(connectUrl, {
-        dismissButtonStyle: "close",
-        readerMode: false,
-        enableBarCollapsing: false,
-      })
+      // Open Phantom using auth session (handles custom URL scheme callbacks)
+      const result = await WebBrowser.openAuthSessionAsync(
+        connectUrl,
+        REDIRECT_URL
+      )
 
-      // Wait for callback
-      const params = await waitForCallback()
+      // Check if auth session was successful
+      if (result.type !== "success" || !result.url) {
+        if (result.type === "cancel" || result.type === "dismiss") {
+          throw new Error("Connection cancelled by user")
+        }
+        throw new Error("Failed to complete authentication")
+      }
+
+      // Parse the callback URL
+      const params = parseCallbackUrl(result.url)
 
       // Phantom returns encrypted data in the connect response
       if (!params.phantom_encryption_public_key || !params.data || !params.nonce) {
@@ -366,7 +327,7 @@ export function usePhantomDeeplink(): UsePhantomDeeplinkReturn {
         payload: bs58.encode(encryptedPayload),
       })
 
-      await WebBrowser.openBrowserAsync(disconnectUrl)
+      await WebBrowser.openAuthSessionAsync(disconnectUrl, REDIRECT_URL)
     } catch (err) {
       console.warn("Phantom disconnect failed:", err)
     } finally {
@@ -409,9 +370,13 @@ export function usePhantomDeeplink(): UsePhantomDeeplinkReturn {
           payload: bs58.encode(encryptedPayload),
         })
 
-        await WebBrowser.openBrowserAsync(signUrl)
+        const result = await WebBrowser.openAuthSessionAsync(signUrl, REDIRECT_URL)
 
-        const params = await waitForCallback()
+        if (result.type !== "success" || !result.url) {
+          throw new Error(result.type === "cancel" ? "Signing cancelled" : "Signing failed")
+        }
+
+        const params = parseCallbackUrl(result.url)
 
         if (!params.data || !params.nonce) {
           throw new Error("Invalid response from Phantom")
@@ -482,9 +447,13 @@ export function usePhantomDeeplink(): UsePhantomDeeplinkReturn {
           payload: bs58.encode(encryptedPayload),
         })
 
-        await WebBrowser.openBrowserAsync(signUrl)
+        const result = await WebBrowser.openAuthSessionAsync(signUrl, REDIRECT_URL)
 
-        const params = await waitForCallback()
+        if (result.type !== "success" || !result.url) {
+          throw new Error(result.type === "cancel" ? "Signing cancelled" : "Signing failed")
+        }
+
+        const params = parseCallbackUrl(result.url)
 
         if (!params.data || !params.nonce) {
           throw new Error("Invalid response from Phantom")
@@ -555,9 +524,13 @@ export function usePhantomDeeplink(): UsePhantomDeeplinkReturn {
           payload: bs58.encode(encryptedPayload),
         })
 
-        await WebBrowser.openBrowserAsync(signUrl)
+        const result = await WebBrowser.openAuthSessionAsync(signUrl, REDIRECT_URL)
 
-        const params = await waitForCallback()
+        if (result.type !== "success" || !result.url) {
+          throw new Error(result.type === "cancel" ? "Transaction cancelled" : "Transaction failed")
+        }
+
+        const params = parseCallbackUrl(result.url)
 
         if (!params.data || !params.nonce) {
           throw new Error("Invalid response from Phantom")

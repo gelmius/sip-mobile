@@ -2,7 +2,9 @@
 
 > **Ecosystem:** [sip-protocol/CLAUDE.md](https://github.com/sip-protocol/sip-protocol/blob/main/CLAUDE.md)
 
-**Purpose:** Native privacy wallet for iOS, Android & Solana Mobile (Seeker)
+**Purpose:** Privacy-first Solana wallet — native key management + shielded payments on iOS, Android & Seeker
+
+**Positioning:** Standalone privacy wallet (not a layer on top of other wallets)
 
 ---
 
@@ -19,7 +21,61 @@ eas build --platform android --profile production --local  # Local APK
 
 **Tabs:** Home | Send | Receive | Swap | Settings
 
-**Wallets:** Privy (embedded) | MWA (Android) | Phantom deeplinks (iOS)
+---
+
+## Wallet Architecture
+
+**Philosophy:** SIP Privacy IS the wallet — users manage keys directly, no external wallet required.
+
+### Wallet Strategy
+
+| Method | Platform | Priority | Status |
+|--------|----------|----------|--------|
+| **Native Wallet** | All | PRIMARY | 🔲 In Progress |
+| **Seed Vault** | Seeker | PRIMARY | 🔲 Planned |
+| MWA | Android | Optional | ✅ Available |
+| Phantom Deeplinks | iOS | Optional | ✅ Available |
+| ~~Privy~~ | ~~All~~ | DEPRECATED | ⚠️ Removing |
+
+### Key Management
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  PRIMARY: Native Wallet (useNativeWallet)                   │
+│  ├── Generate new wallet (BIP39 mnemonic)                   │
+│  ├── Import seed phrase (12/24 words)                       │
+│  ├── Import private key (base58)                            │
+│  ├── SecureStore + Biometrics for security                  │
+│  └── Solana derivation: m/44'/501'/0'/0'                    │
+├─────────────────────────────────────────────────────────────┤
+│  SEEKER: Direct Seed Vault Integration                      │
+│  └── No Phantom middleman — direct Seed Vault API           │
+├─────────────────────────────────────────────────────────────┤
+│  OPTIONAL: External Wallet Connection                       │
+│  ├── MWA (Android) — connect to Phantom/Solflare            │
+│  └── Phantom Deeplinks (iOS) — connect to Phantom           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Security Model
+
+| Layer | Implementation |
+|-------|----------------|
+| Key Storage | `expo-secure-store` (Keychain/Keystore) |
+| Access Control | Biometric auth via `expo-local-authentication` |
+| Derivation | BIP39 → BIP44 (Solana path) |
+| Memory | Keys cleared after signing operations |
+| Backup | Mnemonic export (biometric required) |
+
+### Key Files
+
+```
+src/hooks/useNativeWallet.ts   # Primary wallet hook (TODO)
+src/hooks/useSeedVault.ts      # Seeker Seed Vault integration (TODO)
+src/hooks/useMWA.ts            # Optional: Android external wallet
+src/hooks/usePhantomDeeplink.ts # Optional: iOS external wallet
+src/utils/keyStorage.ts        # SecureStore utilities (TODO)
+```
 
 ---
 
@@ -84,12 +140,36 @@ scrcpy --record session.mp4                    # Record
 
 ## Guidelines
 
-**DO:** Test real devices, NativeWind classes, SecureStore for keys, handle offline
+**DO:**
+- Test on real devices (especially Seeker for Seed Vault)
+- Use NativeWind classes for styling
+- Use SecureStore for ALL key storage
+- Handle offline gracefully
+- Require biometric for sensitive operations
 
-**DON'T:** Block main thread, ignore keyboard/safe areas, use Expo cloud builds
+**DON'T:**
+- Block main thread with crypto operations
+- Ignore keyboard/safe areas
+- Use Expo cloud builds (local only)
+- Log or expose private keys
+- Store keys in AsyncStorage (use SecureStore)
 
-**Packages:** `@sip-protocol/sdk`, `@noble/curves`, `@noble/hashes`, `expo-secure-store`
+**Packages:**
+- `@sip-protocol/sdk` — Privacy primitives
+- `@noble/curves`, `@noble/hashes` — Cryptography
+- `expo-secure-store` — Key storage
+- `expo-local-authentication` — Biometrics
+- `@scure/bip39`, `@scure/bip32` — Key derivation
 
 ---
 
-**Status:** v0.1.0 | dApp Store submitted (awaiting review) | 531 tests passing
+## Related Issues
+
+- [#61](https://github.com/sip-protocol/sip-mobile/issues/61) — EPIC: Native Wallet Architecture
+- [#67](https://github.com/sip-protocol/sip-mobile/issues/67) — useNativeWallet hook
+- [#68](https://github.com/sip-protocol/sip-mobile/issues/68) — keyStorage utilities
+- [#70](https://github.com/sip-protocol/sip-mobile/issues/70) — Seed Vault integration
+
+---
+
+**Status:** v0.1.2 | dApp Store submitted | Wallet pivot in progress

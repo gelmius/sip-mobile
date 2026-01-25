@@ -1,8 +1,14 @@
 /**
- * Mobile Wallet Adapter (MWA) hook for Android
+ * Mobile Wallet Adapter (MWA) Hook — OPTIONAL INTEGRATION
  *
- * Connects to native Solana wallets (Phantom, Solflare, Backpack) on Android
- * using the Solana Mobile Wallet Adapter protocol.
+ * Provides optional connection to external Solana wallets (Phantom, Solflare,
+ * Backpack) on Android using the Mobile Wallet Adapter protocol.
+ *
+ * ⚠️ This is now an OPTIONAL integration.
+ * Primary wallet strategy is native key management.
+ *
+ * @see useNativeWallet — Primary wallet hook (TODO: #67)
+ * @see https://github.com/sip-protocol/sip-mobile/issues/61 — Architecture pivot
  */
 
 import { useState, useCallback, useEffect } from "react"

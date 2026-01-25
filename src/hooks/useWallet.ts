@@ -1,14 +1,22 @@
 /**
- * Unified Wallet Hook
+ * Unified Wallet Hook — TRANSITIONAL
  *
- * Abstracts all 3 wallet connection methods:
- * - Privy (embedded wallet with SSO)
- * - MWA (Mobile Wallet Adapter for Android)
- * - Phantom Deeplinks (iOS external wallet)
+ * ⚠️ ARCHITECTURE PIVOT IN PROGRESS
+ * This hook is being refactored to prioritize native key management.
+ * See: https://github.com/sip-protocol/sip-mobile/issues/61
+ *
+ * Current wallet paths (in order of priority):
+ * - Native wallet (useNativeWallet) — PRIMARY [TODO: #67]
+ * - MWA (useMWA) — OPTIONAL for Android external wallets
+ * - Phantom (usePhantomDeeplink) — OPTIONAL for iOS external wallets
+ * - Privy — DEPRECATED, being removed (#71)
  *
  * Usage:
  *   const { connect, disconnect, account, status } = useWallet()
- *   await connect('privy')  // or 'mwa' or 'phantom'
+ *   await connect('native')  // PRIMARY (TODO)
+ *   await connect('mwa')     // Optional: Android external
+ *   await connect('phantom') // Optional: iOS external
+ *   await connect('privy')   // DEPRECATED
  */
 
 import { useState, useCallback, useEffect } from "react"
