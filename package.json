@@ -21,8 +21,6 @@
     "@expo/vector-icons": "^15.0.3",
     "@noble/curves": "^1.7.0",
     "@noble/hashes": "^1.6.0",
-    "@privy-io/expo": "^0.63.2",
-    "@privy-io/expo-native-extensions": "^0.0.7",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@sip-protocol/sdk": "^0.7.3",
     "@solana-mobile/mobile-wallet-adapter-protocol-web3js": "^2.2.5",

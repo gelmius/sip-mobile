@@ -260,7 +260,7 @@ describe("Wallet Utilities", () => {
       expect(WALLET_INFO.phantom).toBeDefined()
       expect(WALLET_INFO.solflare).toBeDefined()
       expect(WALLET_INFO.backpack).toBeDefined()
-      expect(WALLET_INFO.privy).toBeDefined()
+      expect(WALLET_INFO.native).toBeDefined()
       expect(WALLET_INFO.mwa).toBeDefined()
       expect(WALLET_INFO.walletconnect).toBeDefined()
     })

@@ -31,11 +31,11 @@ eas build --platform android --profile production --local  # Local APK
 
 | Method | Platform | Priority | Status |
 |--------|----------|----------|--------|
-| **Native Wallet** | All | PRIMARY | 🔲 In Progress |
-| **Seed Vault** | Seeker | PRIMARY | 🔲 Planned |
+| **Native Wallet** | All | PRIMARY | ✅ Complete |
+| **Seed Vault** | Seeker | PRIMARY | ✅ Complete |
 | MWA | Android | Optional | ✅ Available |
 | Phantom Deeplinks | iOS | Optional | ✅ Available |
-| ~~Privy~~ | ~~All~~ | DEPRECATED | ⚠️ Removing |
+| ~~Privy~~ | ~~All~~ | REMOVED | ❌ Removed (#71) |
 
 ### Key Management
 
@@ -70,11 +70,15 @@ eas build --platform android --profile production --local  # Local APK
 ### Key Files
 
 ```
-src/hooks/useNativeWallet.ts   # Primary wallet hook (TODO)
-src/hooks/useSeedVault.ts      # Seeker Seed Vault integration (TODO)
+src/hooks/useNativeWallet.ts   # Primary wallet hook
+src/hooks/useSeedVault.ts      # Seeker Seed Vault integration
 src/hooks/useMWA.ts            # Optional: Android external wallet
 src/hooks/usePhantomDeeplink.ts # Optional: iOS external wallet
-src/utils/keyStorage.ts        # SecureStore utilities (TODO)
+src/utils/keyStorage.ts        # SecureStore utilities
+app/(auth)/wallet-setup.tsx    # Wallet setup entry point
+app/(auth)/create-wallet.tsx   # Create new wallet flow
+app/(auth)/import-wallet.tsx   # Import existing wallet flow
+app/settings/backup.tsx        # View/backup recovery phrase
 ```
 
 ---

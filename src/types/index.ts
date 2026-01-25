@@ -21,19 +21,23 @@ export type ChainType = "solana" | "ethereum" | "near"
 
 /**
  * Supported wallet types for mobile
+ *
+ * Note: Native wallet (useNativeWallet) is PRIMARY method.
+ * These types are for OPTIONAL external wallet connections.
  */
 export type WalletType =
+  | "native" // Native wallet (PRIMARY)
   | "phantom"
   | "solflare"
   | "backpack"
-  | "privy"
   | "mwa" // Mobile Wallet Adapter (Solana Mobile)
   | "walletconnect"
+  // | "privy" - REMOVED: Deprecated in #71
 
 /**
  * Wallet connection method for mobile
  */
-export type ConnectionMethod = "deeplink" | "mwa" | "embedded"
+export type ConnectionMethod = "native" | "deeplink" | "mwa"
 
 /**
  * Swap record for history
@@ -89,8 +93,11 @@ export type WalletConnectionStatus =
 
 /**
  * Wallet provider type for unified hook
+ *
+ * Note: "native" is the PRIMARY method via useNativeWallet.
+ * MWA/Phantom are OPTIONAL for external wallet connections.
  */
-export type WalletProviderType = "privy" | "mwa" | "phantom"
+export type WalletProviderType = "native" | "mwa" | "phantom"
 
 /**
  * Connected wallet account info

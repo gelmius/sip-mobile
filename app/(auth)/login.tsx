@@ -1,10 +1,12 @@
 /**
- * Login Screen
+ * External Wallet Connection Screen
  *
- * Main authentication screen with multiple wallet connection options:
- * - Privy (Email, SMS, Apple, Google)
- * - MWA (Android native wallets)
- * - Phantom (iOS deeplinks)
+ * Optional screen for connecting external wallets (MWA, Phantom).
+ * This is for users who want to use their existing wallet instead of
+ * the native SIP Privacy wallet.
+ *
+ * Note: The primary wallet flow uses wallet-setup.tsx for native wallet creation.
+ * This screen is accessed via "Connect External Wallet" from wallet-setup.
  */
 
 import { View, Text, TouchableOpacity, Platform } from "react-native"
@@ -14,16 +16,8 @@ import { useWallet, getRecommendedProvider } from "@/hooks"
 import { useState } from "react"
 
 export default function LoginScreen() {
-  const {
-    connect,
-    status,
-    error,
-    loginWithApple,
-    loginWithGoogle,
-    isPrivyAvailable,
-    isMWAAvailable,
-    isPhantomAvailable,
-  } = useWallet()
+  const { connect, status, error, isMWAAvailable, isPhantomAvailable } =
+    useWallet()
 
   const [isConnecting, setIsConnecting] = useState(false)
   const recommendedProvider = getRecommendedProvider()
@@ -52,49 +46,27 @@ export default function LoginScreen() {
     }
   }
 
-  const handleAppleLogin = async () => {
-    setIsConnecting(true)
-    try {
-      await loginWithApple()
-      // Navigation happens via auth state change
-    } finally {
-      setIsConnecting(false)
-    }
-  }
-
-  const handleGoogleLogin = async () => {
-    setIsConnecting(true)
-    try {
-      await loginWithGoogle()
-      // Navigation happens via auth state change
-    } finally {
-      setIsConnecting(false)
-    }
+  const handleBack = () => {
+    router.back()
   }
 
   return (
     <SafeAreaView className="flex-1 bg-dark-950">
-      <View className="flex-1 px-6 pt-12">
-        {/* Logo & Title */}
-        <View className="items-center mb-12">
-          <View className="w-20 h-20 bg-brand-600 rounded-2xl items-center justify-center mb-6">
-            <Text className="text-4xl">🔒</Text>
-          </View>
-          <Text className="text-3xl font-bold text-white mb-2">
-            SIP Privacy
-          </Text>
-          <Text className="text-dark-400 text-center">
-            Private payments on Solana
-          </Text>
-        </View>
+      <View className="flex-1 px-6 pt-4">
+        {/* Header */}
+        <TouchableOpacity onPress={handleBack} className="mb-4">
+          <Text className="text-brand-500">← Back</Text>
+        </TouchableOpacity>
+
+        <Text className="text-2xl font-bold text-white mb-2">
+          Connect External Wallet
+        </Text>
+        <Text className="text-dark-400 mb-8">
+          Connect your existing Solana wallet to use with SIP Privacy.
+        </Text>
 
         {/* Wallet Connection Options */}
         <View className="gap-3 mb-8">
-          {/* External Wallets Section */}
-          <Text className="text-dark-500 text-sm font-medium mb-2">
-            CONNECT WALLET
-          </Text>
-
           {/* MWA - Android only */}
           {Platform.OS === "android" && isMWAAvailable && (
             <TouchableOpacity
@@ -145,11 +117,12 @@ export default function LoginScreen() {
               <View className="ml-4 flex-1">
                 <View className="flex-row items-center">
                   <Text className="text-white font-semibold">Phantom</Text>
-                  {recommendedProvider === "phantom" && Platform.OS === "ios" && (
-                    <View className="ml-2 px-2 py-0.5 bg-brand-600 rounded">
-                      <Text className="text-xs text-white">Recommended</Text>
-                    </View>
-                  )}
+                  {recommendedProvider === "phantom" &&
+                    Platform.OS === "ios" && (
+                      <View className="ml-2 px-2 py-0.5 bg-brand-600 rounded">
+                        <Text className="text-xs text-white">Recommended</Text>
+                      </View>
+                    )}
                 </View>
                 <Text className="text-dark-500 text-sm">
                   Connect via Phantom app
@@ -158,80 +131,18 @@ export default function LoginScreen() {
               <Text className="text-dark-600 text-2xl">→</Text>
             </TouchableOpacity>
           )}
-        </View>
 
-        {/* Divider */}
-        <View className="flex-row items-center mb-8">
-          <View className="flex-1 h-px bg-dark-800" />
-          <Text className="text-dark-600 mx-4">or</Text>
-          <View className="flex-1 h-px bg-dark-800" />
-        </View>
-
-        {/* Social & Email Options */}
-        <View className="gap-3 mb-8">
-          <Text className="text-dark-500 text-sm font-medium mb-2">
-            CONTINUE WITH
-          </Text>
-
-          {/* Apple Sign In */}
-          {Platform.OS === "ios" && isPrivyAvailable && (
-            <TouchableOpacity
-              className="flex-row items-center p-4 rounded-xl bg-white border border-dark-800"
-              onPress={handleAppleLogin}
-              disabled={isConnecting}
-            >
-              <View className="w-10 h-10 items-center justify-center">
-                <Text className="text-2xl"></Text>
-              </View>
-              <Text className="ml-4 text-black font-semibold">
-                Continue with Apple
+          {/* No wallets available */}
+          {!isMWAAvailable && !isPhantomAvailable && (
+            <View className="p-4 rounded-xl bg-dark-900 border border-dark-800">
+              <Text className="text-dark-400 text-center">
+                No external wallets available on this device.
               </Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Google Sign In */}
-          {isPrivyAvailable && (
-            <TouchableOpacity
-              className="flex-row items-center p-4 rounded-xl bg-dark-900 border border-dark-800"
-              onPress={handleGoogleLogin}
-              disabled={isConnecting}
-            >
-              <View className="w-10 h-10 items-center justify-center">
-                <Text className="text-2xl">G</Text>
-              </View>
-              <Text className="ml-4 text-white font-semibold">
-                Continue with Google
+              <Text className="text-dark-500 text-sm text-center mt-2">
+                Install Phantom to connect an external wallet.
               </Text>
-            </TouchableOpacity>
+            </View>
           )}
-
-          {/* Email */}
-          <TouchableOpacity
-            className="flex-row items-center p-4 rounded-xl bg-dark-900 border border-dark-800"
-            onPress={() => router.push("/(auth)/email")}
-            disabled={isConnecting}
-          >
-            <View className="w-10 h-10 bg-dark-800 rounded-xl items-center justify-center">
-              <Text className="text-xl">✉️</Text>
-            </View>
-            <Text className="ml-4 text-white font-semibold">
-              Continue with Email
-            </Text>
-          </TouchableOpacity>
-
-          {/* Phone */}
-          <TouchableOpacity
-            className="flex-row items-center p-4 rounded-xl bg-dark-900 border border-dark-800"
-            onPress={() => router.push("/(auth)/phone")}
-            disabled={isConnecting}
-          >
-            <View className="w-10 h-10 bg-dark-800 rounded-xl items-center justify-center">
-              <Text className="text-xl">📞</Text>
-            </View>
-            <Text className="ml-4 text-white font-semibold">
-              Continue with Phone
-            </Text>
-          </TouchableOpacity>
         </View>
 
         {/* Error Display */}
@@ -248,13 +159,22 @@ export default function LoginScreen() {
           </View>
         )}
 
-        {/* Terms */}
+        {/* Info */}
         <View className="mt-auto pb-8">
-          <Text className="text-dark-600 text-center text-sm">
-            By continuing, you agree to our{" "}
-            <Text className="text-brand-400">Terms of Service</Text> and{" "}
-            <Text className="text-brand-400">Privacy Policy</Text>
-          </Text>
+          <View className="bg-dark-900 rounded-xl p-4 border border-dark-800">
+            <View className="flex-row items-start">
+              <Text className="text-lg mr-3">💡</Text>
+              <View className="flex-1">
+                <Text className="text-white font-medium mb-1">
+                  Why connect an external wallet?
+                </Text>
+                <Text className="text-dark-400 text-sm leading-5">
+                  If you already have a Solana wallet with funds, you can use it
+                  with SIP Privacy instead of creating a new native wallet.
+                </Text>
+              </View>
+            </View>
+          </View>
         </View>
       </View>
     </SafeAreaView>

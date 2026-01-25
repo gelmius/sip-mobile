@@ -255,8 +255,8 @@ export const useWalletStore = create<WalletState>()(
  */
 function walletTypeToProvider(walletType: WalletType): WalletProviderType {
   switch (walletType) {
-    case "privy":
-      return "privy"
+    case "native":
+      return "native"
     case "mwa":
       return "mwa"
     case "phantom":
@@ -311,11 +311,11 @@ export const WALLET_INFO: Record<
     connectionMethod: "deeplink",
     deepLinkScheme: "backpack://",
   },
-  privy: {
-    name: "Email/Social",
-    icon: "privy",
+  native: {
+    name: "Native Wallet",
+    icon: "wallet",
     chain: "solana",
-    connectionMethod: "embedded",
+    connectionMethod: "native",
   },
   mwa: {
     name: "Mobile Wallet",

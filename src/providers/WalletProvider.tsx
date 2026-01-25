@@ -1,31 +1,28 @@
 /**
- * Wallet Provider — DEPRECATED
+ * Wallet Provider
  *
- * ⚠️ DEPRECATION NOTICE
- * This Privy provider is being removed as part of the native wallet pivot.
- * See: https://github.com/sip-protocol/sip-mobile/issues/71
+ * Simple provider wrapper for wallet context.
+ * The app uses native wallet management (useNativeWallet) as the primary method.
  *
- * The app is transitioning to native key management (useNativeWallet).
- * This file will be removed once native wallet implementation is complete.
- *
- * Note: MWA and Phantom don't require providers - they use hooks directly.
+ * Note: Privy was removed in #71. This provider now just passes through children.
+ * External wallets (MWA, Phantom) use hooks directly without a provider wrapper.
  */
 
-import { PrivyProvider } from "@privy-io/expo"
-
-// TODO: DEPRECATED - Remove Privy integration entirely (see #71)
-const PRIVY_APP_ID = process.env.EXPO_PUBLIC_PRIVY_APP_ID || "your-privy-app-id"
-const PRIVY_CLIENT_ID =
-  process.env.EXPO_PUBLIC_PRIVY_CLIENT_ID || "your-privy-client-id"
+import { ReactNode } from "react"
 
 interface WalletProviderProps {
-  children: React.ReactNode
+  children: ReactNode
 }
 
+/**
+ * WalletProvider
+ *
+ * This is now a simple pass-through since we removed Privy.
+ * Native wallet uses SecureStore directly via useNativeWallet.
+ * External wallets (MWA, Phantom) are handled by their respective hooks.
+ */
 export function WalletProvider({ children }: WalletProviderProps) {
-  return (
-    <PrivyProvider appId={PRIVY_APP_ID} clientId={PRIVY_CLIENT_ID}>
-      {children}
-    </PrivyProvider>
-  )
+  // No wrapper needed - native wallet uses SecureStore directly
+  // MWA and Phantom use their own hooks without provider context
+  return <>{children}</>
 }
