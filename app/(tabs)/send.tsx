@@ -77,7 +77,7 @@ export default function SendScreen() {
         setAmountError(null)
       }
     },
-    [validateAmount]
+    [validateAmount, balance]
   )
 
   const handleRecipientChange = useCallback(
@@ -97,7 +97,7 @@ export default function SendScreen() {
     const maxAmount = (balance - 0.001).toFixed(6) // Leave for fees
     setAmount(maxAmount)
     setAmountError(null)
-  }, [])
+  }, [balance])
 
   const handleReview = useCallback(() => {
     Keyboard.dismiss()
@@ -116,7 +116,7 @@ export default function SendScreen() {
     }
 
     setShowConfirmModal(true)
-  }, [recipient, amount, validateAddress, validateAmount])
+  }, [recipient, amount, balance, validateAddress, validateAmount])
 
   const handleConfirmSend = useCallback(async () => {
     const result = await send({
