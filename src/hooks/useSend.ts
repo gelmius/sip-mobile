@@ -9,7 +9,7 @@ import { useState, useCallback, useMemo } from "react"
 import { useWalletStore } from "@/stores/wallet"
 import { usePrivacyStore } from "@/stores/privacy"
 import { useSettingsStore } from "@/stores/settings"
-import { useWallet } from "./useWallet"
+import { useNativeWallet } from "./useNativeWallet"
 import { useBalance } from "./useBalance"
 import type { PrivacyLevel } from "@/types"
 import {
@@ -135,7 +135,7 @@ function validateSolanaAddress(address: string): AddressValidation {
 export function useSend(): UseSendReturn {
   const { isConnected, address: walletAddress } = useWalletStore()
   const { network } = useSettingsStore()
-  const { signTransaction } = useWallet()
+  const { signTransaction } = useNativeWallet()
   const { balance } = useBalance()
   const { addPayment } = usePrivacyStore()
 
@@ -257,11 +257,34 @@ export function useSend(): UseSendReturn {
         // See: sip-protocol/programs/sip-privacy for instruction format
         // ============================================================
 
-        // Simulate transaction signing (no real tx yet)
-        const mockTxBytes = new Uint8Array(512)
-        mockTxBytes.fill(0)
+        // Create a simple transfer transaction for signing test
+        // Note: This is a mock that creates a real signable transaction
+        const { Transaction, SystemProgram, PublicKey, Connection, LAMPORTS_PER_SOL } = await import("@solana/web3.js")
 
-        const signedTx = await signTransaction(mockTxBytes)
+        const connection = new Connection(
+          network === "mainnet"
+            ? "https://api.mainnet-beta.solana.com"
+            : "https://api.devnet.solana.com"
+        )
+
+        const fromPubkey = new PublicKey(walletAddress)
+        const toPubkey = new PublicKey(recipientAddress)
+        const lamports = Math.floor(parseFloat(params.amount) * LAMPORTS_PER_SOL)
+
+        const transaction = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey,
+            toPubkey,
+            lamports,
+          })
+        )
+
+        // Get recent blockhash
+        const { blockhash } = await connection.getLatestBlockhash()
+        transaction.recentBlockhash = blockhash
+        transaction.feePayer = fromPubkey
+
+        const signedTx = await signTransaction(transaction)
         if (!signedTx) {
           throw new Error("Transaction signing rejected")
         }
