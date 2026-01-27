@@ -460,10 +460,11 @@ export function useNativeWallet(): UseNativeWalletReturn {
         const keypair = Keypair.fromSecretKey(secretKey)
 
         // Sign based on transaction type
+        // Use partialSign to PRESERVE existing signatures (e.g., stealth address signatures)
         if (tx instanceof Transaction) {
-          tx.sign(keypair)
+          tx.partialSign(keypair)
         } else {
-          // VersionedTransaction
+          // VersionedTransaction - sign() preserves existing signatures
           tx.sign([keypair])
         }
 
@@ -556,9 +557,10 @@ export function useNativeWallet(): UseNativeWalletReturn {
         const keypair = Keypair.fromSecretKey(secretKey)
 
         // Sign all transactions
+        // Use partialSign to PRESERVE existing signatures
         const signedTxs = txs.map((tx) => {
           if (tx instanceof Transaction) {
-            tx.sign(keypair)
+            tx.partialSign(keypair)
           } else {
             tx.sign([keypair])
           }

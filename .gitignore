@@ -33,6 +33,11 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Secrets (decrypted keys for deployment)
+secrets/*
+!secrets/README.md
+*.secret.json
+
 # typescript
 *.tsbuildinfo
 
