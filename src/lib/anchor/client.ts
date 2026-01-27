@@ -11,6 +11,7 @@ import {
   SIP_PRIVACY_PROGRAM_ID,
   getConfigPda,
   getTransferRecordPda,
+  getNullifierPda,
   type Config,
   type ShieldedTransferArgs,
 } from "./types"
@@ -561,3 +562,262 @@ export async function fetchAllTransferRecords(
 
 // Re-export bs58 for use in fetchAllTransferRecords
 import bs58 from "bs58"
+
+// ─── Claim Transfer ──────────────────────────────────────────────────────────
+
+export interface ClaimTransferParams {
+  /** Transfer record public key */
+  transferRecordPubkey: PublicKey
+  /** Stealth recipient address (must match transfer record) */
+  stealthAddress: PublicKey
+  /** Stealth private key (scalar, hex string with 0x prefix) */
+  stealthPrivateKey: string
+  /** Recipient wallet address (receives the funds) */
+  recipientAddress: PublicKey
+}
+
+export interface ClaimTransferResult {
+  /** Transaction signature */
+  signature: string
+  /** Nullifier used */
+  nullifier: Uint8Array
+}
+
+/**
+ * Build a claim transfer transaction
+ *
+ * This creates a transaction to claim funds from a stealth address.
+ * The stealth_account must sign to prove ownership.
+ *
+ * Returns:
+ * - transaction: The unsigned transaction
+ * - stealthScalar: The stealth private key scalar for custom signing
+ * - stealthPublicKey: The stealth public key bytes
+ * - nullifier: The nullifier hash
+ */
+export async function buildClaimTransfer(
+  connection: Connection,
+  params: ClaimTransferParams,
+  programId: PublicKey = SIP_PRIVACY_PROGRAM_ID
+): Promise<{
+  transaction: Transaction
+  stealthScalar: Uint8Array
+  stealthPublicKey: Uint8Array
+  nullifier: Uint8Array
+}> {
+  const { sha256 } = await import("@noble/hashes/sha256")
+  const { hexToBytes } = await import("@/lib/stealth")
+
+  // Parse stealth private key (it's a scalar, not a seed)
+  const stealthPrivateKeyBytes = hexToBytes(params.stealthPrivateKey)
+
+  // Compute public key from scalar to verify
+  const stealthPublicKeyBytes = getPublicKeyFromScalar(stealthPrivateKeyBytes)
+  const computedPubkey = new PublicKey(stealthPublicKeyBytes)
+
+  // Verify the computed public key matches the expected stealth address
+  if (!computedPubkey.equals(params.stealthAddress)) {
+    console.error(
+      "Derived stealth pubkey doesn't match!",
+      "\nExpected:", params.stealthAddress.toBase58(),
+      "\nGot:", computedPubkey.toBase58()
+    )
+    throw new Error("Stealth private key doesn't match stealth address")
+  }
+
+  // Compute nullifier: SHA256(transfer_record_pubkey || stealth_private_key)
+  const nullifierPreimage = new Uint8Array([
+    ...params.transferRecordPubkey.toBytes(),
+    ...stealthPrivateKeyBytes,
+  ])
+  const nullifier = sha256(nullifierPreimage)
+
+  // Derive PDAs
+  const [configPda] = getConfigPda(programId)
+  const [nullifierPda] = getNullifierPda(nullifier, programId)
+
+  // Generate mock proof (real ZK proof would prove ownership)
+  const mockProof = sha256(new Uint8Array([...nullifier, ...Buffer.from("CLAIM_PROOF")]))
+
+  // Encode claim_transfer instruction data
+  // Discriminator = SHA256("global:claim_transfer")[0..8]
+  const discriminator = Buffer.from([
+    0xca, 0xb2, 0x3a, 0xbe, 0xe6, 0xea, 0xe5, 0x11,
+  ])
+
+  const proofLen = mockProof.length
+  const instructionData = Buffer.alloc(8 + 32 + 4 + proofLen)
+  let offset = 0
+
+  // Discriminator
+  discriminator.copy(instructionData, offset)
+  offset += 8
+
+  // Nullifier (32 bytes)
+  Buffer.from(nullifier).copy(instructionData, offset)
+  offset += 32
+
+  // Proof (length-prefixed Vec<u8>)
+  instructionData.writeUInt32LE(proofLen, offset)
+  offset += 4
+  Buffer.from(mockProof).copy(instructionData, offset)
+
+  // Create instruction
+  const instruction = new web3.TransactionInstruction({
+    keys: [
+      { pubkey: configPda, isSigner: false, isWritable: false },
+      { pubkey: params.transferRecordPubkey, isSigner: false, isWritable: true },
+      { pubkey: nullifierPda, isSigner: false, isWritable: true },
+      { pubkey: params.stealthAddress, isSigner: true, isWritable: true },
+      { pubkey: params.recipientAddress, isSigner: true, isWritable: true },
+      { pubkey: web3.SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    programId,
+    data: instructionData,
+  })
+
+  // Build transaction
+  const transaction = new Transaction().add(instruction)
+
+  // Get recent blockhash
+  const { blockhash } = await connection.getLatestBlockhash()
+  transaction.recentBlockhash = blockhash
+  transaction.feePayer = params.recipientAddress
+
+  return {
+    transaction,
+    stealthScalar: stealthPrivateKeyBytes,
+    stealthPublicKey: stealthPublicKeyBytes,
+    nullifier,
+  }
+}
+
+/**
+ * Sign the stealth account portion of a claim transaction
+ *
+ * This adds the stealth address signature to the transaction using
+ * custom ed25519 signing with the scalar (not a seed).
+ */
+export async function signClaimWithStealth(
+  transaction: Transaction,
+  stealthScalar: Uint8Array,
+  stealthPublicKey: Uint8Array
+): Promise<Transaction> {
+  // Get the message to sign
+  const message = transaction.serializeMessage()
+
+  // Sign with the scalar
+  const signature = await signWithScalar(message, stealthScalar, stealthPublicKey)
+
+  // Add signature to transaction
+  const stealthPubkey = new PublicKey(stealthPublicKey)
+  transaction.addSignature(stealthPubkey, Buffer.from(signature))
+
+  return transaction
+}
+
+/**
+ * Sign a transaction message with an ed25519 scalar (not a seed)
+ *
+ * The stealth private key is a scalar (result of s_view + hash(S) mod L),
+ * not a seed. Standard ed25519 signing expects a seed which gets hashed
+ * to derive the scalar. We need custom signing that uses the scalar directly.
+ *
+ * ed25519 signing algorithm:
+ * 1. r = SHA512(prefix || message) mod L  (nonce)
+ * 2. R = r * G  (nonce point)
+ * 3. k = SHA512(R || A || message) mod L
+ * 4. S = (r + k * scalar) mod L
+ * 5. signature = R || S (64 bytes)
+ *
+ * Since we don't have the original prefix, we generate a deterministic one
+ * from the scalar: prefix = SHA512(scalar || "SIP-NONCE-PREFIX")[32:64]
+ */
+async function signWithScalar(
+  message: Uint8Array,
+  scalarBytes: Uint8Array,
+  publicKeyBytes: Uint8Array
+): Promise<Uint8Array> {
+  const { ed25519 } = await import("@noble/curves/ed25519")
+  const { sha512 } = await import("@noble/hashes/sha512")
+
+  const ED25519_ORDER = BigInt(
+    "0x1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3ed"
+  )
+
+  // Convert scalar bytes to bigint (little-endian)
+  let scalar = 0n
+  for (let i = scalarBytes.length - 1; i >= 0; i--) {
+    scalar = (scalar << 8n) | BigInt(scalarBytes[i])
+  }
+  scalar = scalar % ED25519_ORDER
+
+  // Generate deterministic prefix from scalar
+  const prefixInput = new Uint8Array([...scalarBytes, ...Buffer.from("SIP-NONCE-PREFIX")])
+  const prefixHash = sha512(prefixInput)
+  const prefix = prefixHash.slice(32, 64) // Use second half as prefix
+
+  // r = SHA512(prefix || message) mod L
+  const rInput = new Uint8Array([...prefix, ...message])
+  const rHash = sha512(rInput)
+  let r = 0n
+  for (let i = rHash.length - 1; i >= 0; i--) {
+    r = (r << 8n) | BigInt(rHash[i])
+  }
+  r = r % ED25519_ORDER
+
+  // R = r * G
+  const R = ed25519.ExtendedPoint.BASE.multiply(r)
+  const RBytes = R.toRawBytes()
+
+  // k = SHA512(R || A || message) mod L
+  const kInput = new Uint8Array([...RBytes, ...publicKeyBytes, ...message])
+  const kHash = sha512(kInput)
+  let k = 0n
+  for (let i = kHash.length - 1; i >= 0; i--) {
+    k = (k << 8n) | BigInt(kHash[i])
+  }
+  k = k % ED25519_ORDER
+
+  // S = (r + k * scalar) mod L
+  const S = (r + k * scalar) % ED25519_ORDER
+
+  // Convert S to bytes (little-endian)
+  const SBytes = new Uint8Array(32)
+  let tempS = S
+  for (let i = 0; i < 32; i++) {
+    SBytes[i] = Number(tempS & 0xffn)
+    tempS >>= 8n
+  }
+
+  // signature = R || S (64 bytes)
+  const signature = new Uint8Array(64)
+  signature.set(RBytes, 0)
+  signature.set(SBytes, 32)
+
+  return signature
+}
+
+/**
+ * Get public key bytes from scalar
+ */
+function getPublicKeyFromScalar(scalarBytes: Uint8Array): Uint8Array {
+  const { ed25519 } = require("@noble/curves/ed25519")
+
+  const ED25519_ORDER = BigInt(
+    "0x1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3ed"
+  )
+
+  // Convert scalar bytes to bigint (little-endian)
+  let scalar = 0n
+  for (let i = scalarBytes.length - 1; i >= 0; i--) {
+    scalar = (scalar << 8n) | BigInt(scalarBytes[i])
+  }
+  scalar = scalar % ED25519_ORDER
+
+  // Compute public key: P = scalar * G
+  const publicKeyPoint = ed25519.ExtendedPoint.BASE.multiply(scalar)
+  return publicKeyPoint.toRawBytes()
+}
+
+

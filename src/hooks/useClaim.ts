@@ -3,23 +3,25 @@
  *
  * Handles the claiming of stealth payments:
  * 1. Derive spending key from stealth address + viewing key
- * 2. Sign claim transaction
- * 3. Submit to network
+ * 2. Sign claim transaction with stealth private key
+ * 3. Submit to network via Anchor program
  * 4. Update payment status
  */
 
 import { useState, useCallback, useMemo } from "react"
-import { Buffer } from "buffer"
 import * as SecureStore from "expo-secure-store"
+import { Connection, PublicKey, Transaction } from "@solana/web3.js"
 import { usePrivacyStore } from "@/stores/privacy"
 import { useWalletStore } from "@/stores/wallet"
 import { useSettingsStore } from "@/stores/settings"
+import { useNativeWallet } from "./useNativeWallet"
 import type { PaymentRecord } from "@/types"
 import {
   deriveStealthPrivateKey,
-  hexToBytes,
   type StealthAddress,
 } from "@/lib/stealth"
+import { buildClaimTransfer, signClaimWithStealth } from "@/lib/anchor/client"
+import bs58 from "bs58"
 
 // ============================================================================
 // TYPES
@@ -138,60 +140,74 @@ async function deriveSpendingKeyFromPayment(
  * 2. Signs with the derived stealth private key
  */
 /**
- * Build claim transaction
- *
- * ============================================================
- * MOCK TRANSACTION (Anchor infrastructure required)
- * ============================================================
- * Real implementation requires:
- * 1. @coral-xyz/anchor dependency
- * 2. IDL types from sip-privacy program
- * 3. PDA derivation for: config, transfer_record, nullifier_record
- * 4. Proof of stealth address ownership (derived from viewing key)
- * 5. Nullifier generation to prevent double-claims
- *
- * Program: S1PMFspo4W6BYKHWkHNF7kZ3fnqibEXg3LQjxepS9at (devnet)
- * Instruction: claim_transfer / claim_token_transfer
- * ============================================================
+ * Get RPC URL for network
  */
-async function buildClaimTransaction(
-  _payment: PaymentRecord,
-  derivedKey: string,
-  _destinationAddress: string,
-  _network: string
-): Promise<{ serialized: Uint8Array; signature: string }> {
-  // Simulate building delay
-  await new Promise((resolve) => setTimeout(resolve, 300))
-
-  // Mock signature using derived key
-  const mockSig = new Uint8Array(64)
-  const derivedKeyBytes = hexToBytes(derivedKey)
-  mockSig.set(derivedKeyBytes.slice(0, 32), 0)
-
-  return {
-    serialized: new Uint8Array(512).fill(0),
-    signature: Array.from(mockSig.slice(0, 32))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join(""),
-  }
+function getRpcUrl(network: string): string {
+  return network === "mainnet"
+    ? "https://api.mainnet-beta.solana.com"
+    : "https://api.devnet.solana.com"
 }
 
 /**
- * Submit claim transaction to network
+ * Find transfer record PDA from stealth address
  *
- * Real: await connection.sendRawTransaction(serializedTx)
+ * The stealth address format is: sip:solana:<ephemeralHex>:<stealthBase58>
+ * The transfer record pubkey is stored in txHash field as fallback
  */
-async function submitClaimTransaction(
-  _serializedTx: Uint8Array,
-  _network: string
-): Promise<string> {
-  // Simulate network delay
-  await new Promise((resolve) => setTimeout(resolve, 800))
+async function findTransferRecordPubkey(
+  payment: PaymentRecord,
+  connection: Connection
+): Promise<PublicKey | null> {
+  // Try to use the txHash which stores the transfer record PDA
+  if (payment.txHash && !payment.txHash.startsWith("mock_")) {
+    try {
+      return new PublicKey(payment.txHash)
+    } catch {
+      // Not a valid pubkey, continue to search
+    }
+  }
 
-  // Generate mock transaction hash
-  return `mock_claim_${Date.now()}_${Array.from({ length: 16 }, () =>
-    "0123456789abcdef"[Math.floor(Math.random() * 16)]
-  ).join("")}`
+  // Fallback: search program accounts for this stealth recipient
+  // Parse the stealth address to get the recipient pubkey
+  const stealthAddr = parsePaymentStealthAddress(payment.stealthAddress)
+  if (!stealthAddr || !stealthAddr.address) {
+    console.error("Cannot parse stealth address")
+    return null
+  }
+
+  // The stealthAddr.address is base58 of the stealth recipient
+  try {
+    const { SIP_PRIVACY_PROGRAM_ID } = await import("@/lib/anchor/types")
+    const stealthPubkey = new PublicKey(stealthAddr.address)
+
+    // Search for transfer records with this stealth recipient
+    const accounts = await connection.getProgramAccounts(SIP_PRIVACY_PROGRAM_ID, {
+      filters: [
+        // TransferRecord discriminator
+        {
+          memcmp: {
+            offset: 0,
+            bytes: bs58.encode(Buffer.from([0xc8, 0x1f, 0x06, 0x9e, 0xf0, 0x19, 0xf8, 0x35])),
+          },
+        },
+        // stealth_recipient at offset 8 + 32 = 40
+        {
+          memcmp: {
+            offset: 40,
+            bytes: stealthPubkey.toBase58(),
+          },
+        },
+      ],
+    })
+
+    if (accounts.length > 0) {
+      return accounts[0].pubkey
+    }
+  } catch (err) {
+    console.error("Failed to search for transfer record:", err)
+  }
+
+  return null
 }
 
 // ============================================================================
@@ -202,6 +218,7 @@ export function useClaim(): UseClaimReturn {
   const { isConnected, address: walletAddress } = useWalletStore()
   const { network } = useSettingsStore()
   const { payments, updatePayment } = usePrivacyStore()
+  const { signTransaction } = useNativeWallet()
 
   const [progress, setProgress] = useState<ClaimProgress>({
     status: "idle",
@@ -248,10 +265,10 @@ export function useClaim(): UseClaimReturn {
           throw new Error("Invalid stealth keys")
         }
 
-        // Step 2: Derive spending key using real cryptographic operations
+        // Step 2: Derive stealth spending key using real cryptographic operations
         setProgress({
           status: "deriving",
-          message: "Deriving spending key...",
+          message: "Deriving stealth private key...",
           step: 2,
           totalSteps: CLAIM_STEPS,
         })
@@ -266,7 +283,16 @@ export function useClaim(): UseClaimReturn {
           throw new Error("Failed to derive spending key - invalid stealth address")
         }
 
-        // Step 3: Build and sign claim transaction
+        // Parse stealth address to get components
+        const stealthAddr = parsePaymentStealthAddress(payment.stealthAddress)
+        if (!stealthAddr || !stealthAddr.address) {
+          throw new Error("Invalid stealth address format")
+        }
+
+        // Get stealth recipient pubkey from the address
+        const stealthPubkey = new PublicKey(stealthAddr.address)
+
+        // Step 3: Build claim transaction
         setProgress({
           status: "signing",
           message: "Building claim transaction...",
@@ -274,14 +300,51 @@ export function useClaim(): UseClaimReturn {
           totalSteps: CLAIM_STEPS,
         })
 
-        const { serialized } = await buildClaimTransaction(
-          payment,
-          derivedKey,
-          walletAddress,
-          network
+        // Setup connection
+        const connection = new Connection(getRpcUrl(network), { commitment: "confirmed" })
+
+        // Find transfer record PDA
+        const transferRecordPubkey = await findTransferRecordPubkey(payment, connection)
+        if (!transferRecordPubkey) {
+          throw new Error("Transfer record not found on-chain")
+        }
+
+        // Build the claim transaction
+        const recipientPubkey = new PublicKey(walletAddress)
+        const { transaction, stealthScalar, stealthPublicKey, nullifier } = await buildClaimTransfer(
+          connection,
+          {
+            transferRecordPubkey,
+            stealthAddress: stealthPubkey,
+            stealthPrivateKey: derivedKey,
+            recipientAddress: recipientPubkey,
+          }
         )
 
-        // Step 4: Submit transaction
+        console.log("Claim transaction built")
+        console.log("Nullifier:", bs58.encode(nullifier))
+        console.log("Stealth pubkey:", bs58.encode(stealthPublicKey))
+        console.log("Expected stealth pubkey:", stealthPubkey.toBase58())
+
+        // Sign with stealth scalar (custom ed25519 signing with derived scalar)
+        const stealthSignedTx = await signClaimWithStealth(
+          transaction,
+          stealthScalar,
+          stealthPublicKey
+        )
+
+        // Step 4: Sign with user wallet and submit
+        setProgress({
+          status: "submitting",
+          message: "Requesting wallet signature...",
+          step: 4,
+          totalSteps: CLAIM_STEPS,
+        })
+
+        // Sign with user's wallet (recipient/feePayer)
+        const signedTransaction = await signTransaction(stealthSignedTx)
+
+        // Submit the fully signed transaction
         setProgress({
           status: "submitting",
           message: "Submitting to network...",
@@ -289,14 +352,26 @@ export function useClaim(): UseClaimReturn {
           totalSteps: CLAIM_STEPS,
         })
 
-        const txHash = await submitClaimTransaction(serialized, network)
+        const signature = await connection.sendRawTransaction(
+          (signedTransaction as Transaction).serialize()
+        )
+
+        // Wait for confirmation
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash()
+        await connection.confirmTransaction({
+          signature,
+          blockhash,
+          lastValidBlockHeight,
+        })
+
+        console.log("Claim transaction submitted:", signature)
 
         // Update payment status
         updatePayment(payment.id, {
           status: "claimed",
           claimed: true,
           claimedAt: Date.now(),
-          txHash: txHash,
+          txHash: signature,
         })
 
         setProgress({
@@ -306,9 +381,10 @@ export function useClaim(): UseClaimReturn {
           totalSteps: CLAIM_STEPS,
         })
 
-        return { success: true, txHash }
+        return { success: true, txHash: signature }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Claim failed"
+        console.error("Claim error:", err)
         setError(errorMessage)
         setProgress({
           status: "error",
@@ -319,7 +395,7 @@ export function useClaim(): UseClaimReturn {
         return { success: false, error: errorMessage }
       }
     },
-    [isConnected, walletAddress, updatePayment]
+    [isConnected, walletAddress, network, updatePayment, signTransaction]
   )
 
   const claimMultiple = useCallback(
