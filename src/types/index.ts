@@ -71,7 +71,10 @@ export interface PaymentRecord {
   token: string
   status: "pending" | "completed" | "failed" | "claimed"
   stealthAddress?: string
+  /** Transfer record PDA (for received payments) or send tx signature */
   txHash?: string
+  /** Claim transaction signature (set when payment is claimed) */
+  claimTxHash?: string
   timestamp: number
   privacyLevel: PrivacyLevel
   claimed?: boolean

@@ -367,11 +367,12 @@ export function useClaim(): UseClaimReturn {
         console.log("Claim transaction submitted:", signature)
 
         // Update payment status
+        // IMPORTANT: Don't overwrite txHash - it's the transfer record PDA used for sync
         updatePayment(payment.id, {
           status: "claimed",
           claimed: true,
           claimedAt: Date.now(),
-          txHash: signature,
+          claimTxHash: signature,
         })
 
         setProgress({

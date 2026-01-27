@@ -1,8 +1,11 @@
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native'
+import { View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { useWalletStore, formatAddress } from '@/stores/wallet'
 import { useViewingKeys } from '@/hooks/useViewingKeys'
+import { usePrivacyStore } from '@/stores/privacy'
+import { useSwapStore } from '@/stores/swap'
+import { useToastStore } from '@/stores/toast'
 
 type SettingsItemProps = {
   icon: string
@@ -32,8 +35,55 @@ function SettingsItem({ icon, title, subtitle, onPress }: SettingsItemProps) {
 export default function SettingsScreen() {
   const { isConnected, address } = useWalletStore()
   const { getActiveDisclosures } = useViewingKeys()
+  const { payments, clearPayments } = usePrivacyStore()
+  const { swaps, clearHistory: clearSwapHistory } = useSwapStore()
+  const { addToast } = useToastStore()
 
   const activeDisclosures = getActiveDisclosures()
+
+  const handleClearPaymentHistory = () => {
+    Alert.alert(
+      'Clear Payment History',
+      `This will remove ${payments.length} payment records from your device. On-chain data is not affected. You can rescan to recover.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: () => {
+            clearPayments()
+            addToast({
+              type: 'success',
+              title: 'History Cleared',
+              message: 'Payment history has been cleared. Rescan to recover.',
+            })
+          },
+        },
+      ]
+    )
+  }
+
+  const handleClearSwapHistory = () => {
+    Alert.alert(
+      'Clear Swap History',
+      `This will remove ${swaps.length} swap records from your device.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: () => {
+            clearSwapHistory()
+            addToast({
+              type: 'success',
+              title: 'History Cleared',
+              message: 'Swap history has been cleared.',
+            })
+          },
+        },
+      ]
+    )
+  }
   const disclosureSubtitle = activeDisclosures.length > 0
     ? `${activeDisclosures.length} active disclosure${activeDisclosures.length !== 1 ? 's' : ''}`
     : 'Manage disclosure keys'
@@ -111,6 +161,27 @@ export default function SettingsScreen() {
               icon="⚡"
               title="RPC Provider"
               subtitle="Helius"
+            />
+          </View>
+        </View>
+
+        {/* Data & Storage Section */}
+        <View className="mt-6">
+          <Text className="text-dark-400 text-sm px-4 mb-2 uppercase">
+            Data & Storage
+          </Text>
+          <View className="rounded-xl overflow-hidden mx-4">
+            <SettingsItem
+              icon="🗑️"
+              title="Clear Payment History"
+              subtitle={`${payments.length} records`}
+              onPress={handleClearPaymentHistory}
+            />
+            <SettingsItem
+              icon="🔄"
+              title="Clear Swap History"
+              subtitle={`${swaps.length} records`}
+              onPress={handleClearSwapHistory}
             />
           </View>
         </View>
