@@ -14,21 +14,41 @@ export default function RootLayout() {
 
   useEffect(() => {
     async function prepare() {
+      console.log("[SplashScreen] prepare() started")
       try {
         // Pre-load any critical resources here
         // For now, just a minimal delay to ensure smooth transition
         await new Promise((resolve) => setTimeout(resolve, 100))
+        console.log("[SplashScreen] prepare() delay complete")
       } finally {
+        console.log("[SplashScreen] setIsReady(true)")
         setIsReady(true)
       }
     }
     prepare()
   }, [])
 
+  // Hide splash screen when ready
+  useEffect(() => {
+    if (isReady) {
+      console.log("[SplashScreen] isReady=true, hiding splash...")
+      SplashScreen.hideAsync()
+        .then(() => console.log("[SplashScreen] hideAsync SUCCESS"))
+        .catch((e) => console.error("[SplashScreen] hideAsync ERROR:", e))
+    }
+  }, [isReady])
+
   const onLayoutRootView = useCallback(async () => {
+    console.log("[SplashScreen] onLayoutRootView called, isReady:", isReady)
     if (isReady) {
       // Hide splash screen once layout is ready
-      await SplashScreen.hideAsync()
+      console.log("[SplashScreen] Calling hideAsync...")
+      try {
+        await SplashScreen.hideAsync()
+        console.log("[SplashScreen] hideAsync completed successfully")
+      } catch (e) {
+        console.error("[SplashScreen] hideAsync error:", e)
+      }
     }
   }, [isReady])
 

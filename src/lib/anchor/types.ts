@@ -3,6 +3,7 @@
  * Type definitions for Anchor program interactions
  */
 import { PublicKey } from "@solana/web3.js"
+import { Buffer } from "buffer"
 
 // Program ID
 export const SIP_PRIVACY_PROGRAM_ID = new PublicKey(
@@ -17,7 +18,6 @@ export const NULLIFIER_SEED = Buffer.from("nullifier")
 // Account types
 export interface Config {
   authority: PublicKey
-  feeCollector: PublicKey
   feeBps: number
   paused: boolean
   totalTransfers: bigint

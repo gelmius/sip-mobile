@@ -52,7 +52,7 @@ export interface ProgramState {
   isInitialized: boolean
   totalTransfers: bigint
   feeBps: number
-  feeCollector: PublicKey | null
+  authority: PublicKey | null
 }
 
 // ─── Client Class ──────────────────────────────────────────────────────────
@@ -86,24 +86,22 @@ export class SipPrivacyClient {
       // Skip the 8-byte discriminator
       const data = accountInfo.data.slice(8)
 
-      // Parse fields according to the IDL struct layout
+      // Parse fields according to the IDL struct layout:
       // authority: pubkey (32 bytes)
-      // feeCollector: pubkey (32 bytes)
-      // feeBps: u16 (2 bytes)
+      // fee_bps: u16 (2 bytes)
       // paused: bool (1 byte)
-      // totalTransfers: u64 (8 bytes)
+      // total_transfers: u64 (8 bytes)
       // bump: u8 (1 byte)
+      // Total: 44 bytes
 
       const authority = new PublicKey(data.slice(0, 32))
-      const feeCollector = new PublicKey(data.slice(32, 64))
-      const feeBps = data.readUInt16LE(64)
-      const paused = data[66] === 1
-      const totalTransfers = data.readBigUInt64LE(67)
-      const bump = data[75]
+      const feeBps = data.readUInt16LE(32)
+      const paused = data[34] === 1
+      const totalTransfers = data.readBigUInt64LE(35)
+      const bump = data[43]
 
       return {
         authority,
-        feeCollector,
         feeBps,
         paused,
         totalTransfers,
@@ -126,7 +124,7 @@ export class SipPrivacyClient {
       isInitialized: config !== null,
       totalTransfers: config?.totalTransfers ?? 0n,
       feeBps: config?.feeBps ?? 0,
-      feeCollector: config?.feeCollector ?? null,
+      authority: config?.authority ?? null,
     }
   }
 
@@ -201,6 +199,10 @@ export class SipPrivacyClient {
       actualAmount: lamports,
     })
 
+    // Fee collector is the authority address (treasury)
+    // For devnet, fees go to the program authority
+    const feeCollector = config.authority
+
     // Create the instruction
     const instruction = new web3.TransactionInstruction({
       keys: [
@@ -208,7 +210,7 @@ export class SipPrivacyClient {
         { pubkey: transferRecordPda, isSigner: false, isWritable: true },
         { pubkey: sender, isSigner: true, isWritable: true },
         { pubkey: params.stealthPubkey, isSigner: false, isWritable: true },
-        { pubkey: config.feeCollector, isSigner: false, isWritable: true },
+        { pubkey: feeCollector, isSigner: false, isWritable: true },
         { pubkey: web3.SystemProgram.programId, isSigner: false, isWritable: false },
       ],
       programId: this.programId,
@@ -234,7 +236,7 @@ export class SipPrivacyClient {
    * Encode shielded transfer instruction data
    *
    * Layout:
-   * - 8 bytes: instruction discriminator (sha256("global:shielded_transfer")[:8])
+   * - 8 bytes: instruction discriminator (from IDL)
    * - 33 bytes: amount_commitment
    * - 32 bytes: stealth_pubkey
    * - 33 bytes: ephemeral_pubkey
@@ -246,10 +248,9 @@ export class SipPrivacyClient {
    * - 8 bytes: actual_amount (u64 LE)
    */
   private encodeShieldedTransferData(args: ShieldedTransferArgs): Buffer {
-    // Calculate instruction discriminator for "shielded_transfer"
-    // This is the first 8 bytes of sha256("global:shielded_transfer")
+    // Discriminator from IDL: [191, 130, 5, 127, 124, 187, 238, 188]
     const discriminator = Buffer.from([
-      0x5f, 0x80, 0xa9, 0x2e, 0x4b, 0x5d, 0x76, 0x98,
+      0xbf, 0x82, 0x05, 0x7f, 0x7c, 0xbb, 0xee, 0xbc,
     ])
 
     // Calculate total buffer size

@@ -114,10 +114,20 @@ function validateStealthAddress(address: string): AddressValidation {
     return { isValid: false, type: "invalid", error: `Unsupported chain: ${chain}` }
   }
 
-  // Validate keys (should be hex)
-  const hexRegex = /^(0x)?[0-9a-fA-F]+$/
-  if (!hexRegex.test(spendingKey) || !hexRegex.test(viewingKey)) {
-    return { isValid: false, type: "invalid", error: "Invalid key format" }
+  // Validate keys based on chain
+  // Solana uses Base58, EVM chains use hex
+  if (chain === "solana") {
+    // Base58 regex (no 0, O, I, l)
+    const base58Regex = /^[1-9A-HJ-NP-Za-km-z]+$/
+    if (!base58Regex.test(spendingKey) || !base58Regex.test(viewingKey)) {
+      return { isValid: false, type: "invalid", error: "Invalid key format (expected Base58)" }
+    }
+  } else {
+    // EVM chains use hex
+    const hexRegex = /^(0x)?[0-9a-fA-F]+$/
+    if (!hexRegex.test(spendingKey) || !hexRegex.test(viewingKey)) {
+      return { isValid: false, type: "invalid", error: "Invalid key format (expected hex)" }
+    }
   }
 
   return { isValid: true, type: "stealth", chain }

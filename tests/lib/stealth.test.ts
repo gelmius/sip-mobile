@@ -69,18 +69,25 @@ describe("Stealth Library", () => {
   })
 
   describe("formatStealthMetaAddress", () => {
-    it("should format correctly with all fields", () => {
+    // Use 32-byte keys for Solana (required for base58)
+    const SPENDING_KEY_HEX = "0x" + "ab".repeat(32)
+    const VIEWING_KEY_HEX = "0x" + "cd".repeat(32)
+    // Correct base58 encodings
+    const SPENDING_KEY_BASE58 = "CZ8YUVdk7znjrUmnb5n7kgySk9yRAsQDYmyCxzfSky9t"
+    const VIEWING_KEY_BASE58 = "ErNbLjU6E8tSbZH3REsMeTDP3Z8G52k6YedWwvBpAJ7v"
+
+    it("should format Solana keys as base58", () => {
       const metaAddress = {
         chain: "solana",
-        spendingKey: "0x1234",
-        viewingKey: "0x5678",
+        spendingKey: SPENDING_KEY_HEX,
+        viewingKey: VIEWING_KEY_HEX,
       }
       expect(formatStealthMetaAddress(metaAddress)).toBe(
-        "sip:solana:0x1234:0x5678"
+        `sip:solana:${SPENDING_KEY_BASE58}:${VIEWING_KEY_BASE58}`
       )
     })
 
-    it("should handle different chains", () => {
+    it("should format EVM keys as hex", () => {
       const metaAddress = {
         chain: "ethereum",
         spendingKey: "0xabc",
@@ -94,42 +101,56 @@ describe("Stealth Library", () => {
     it("should ignore optional label in format", () => {
       const metaAddress = {
         chain: "solana",
-        spendingKey: "0x1234",
-        viewingKey: "0x5678",
+        spendingKey: SPENDING_KEY_HEX,
+        viewingKey: VIEWING_KEY_HEX,
         label: "My Wallet",
       }
       expect(formatStealthMetaAddress(metaAddress)).toBe(
-        "sip:solana:0x1234:0x5678"
+        `sip:solana:${SPENDING_KEY_BASE58}:${VIEWING_KEY_BASE58}`
       )
     })
   })
 
   describe("parseStealthMetaAddress", () => {
-    it("should parse valid address string", () => {
-      const result = parseStealthMetaAddress("sip:solana:0x1234:0x5678")
+    // Use 32-byte keys for Solana
+    const SPENDING_KEY_HEX = "0x" + "ab".repeat(32)
+    const VIEWING_KEY_HEX = "0x" + "cd".repeat(32)
+    // Correct base58 encodings
+    const SPENDING_KEY_BASE58 = "CZ8YUVdk7znjrUmnb5n7kgySk9yRAsQDYmyCxzfSky9t"
+    const VIEWING_KEY_BASE58 = "ErNbLjU6E8tSbZH3REsMeTDP3Z8G52k6YedWwvBpAJ7v"
+
+    it("should parse valid Solana base58 address string", () => {
+      const result = parseStealthMetaAddress(
+        `sip:solana:${SPENDING_KEY_BASE58}:${VIEWING_KEY_BASE58}`
+      )
       expect(result).toEqual({
         chain: "solana",
-        spendingKey: "0x1234",
-        viewingKey: "0x5678",
+        spendingKey: SPENDING_KEY_HEX,
+        viewingKey: VIEWING_KEY_HEX,
       })
     })
 
     it("should return null for invalid prefix", () => {
-      expect(parseStealthMetaAddress("invalid:solana:0x1234:0x5678")).toBeNull()
+      expect(parseStealthMetaAddress("invalid:solana:abc:def")).toBeNull()
       expect(parseStealthMetaAddress("0x1234")).toBeNull()
       expect(parseStealthMetaAddress("")).toBeNull()
     })
 
     it("should return null for wrong number of parts", () => {
-      expect(parseStealthMetaAddress("sip:solana:0x1234")).toBeNull()
-      expect(parseStealthMetaAddress("sip:solana:0x1234:0x5678:extra")).toBeNull()
+      expect(parseStealthMetaAddress("sip:solana:abc")).toBeNull()
+      expect(parseStealthMetaAddress("sip:solana:abc:def:extra")).toBeNull()
+    })
+
+    it("should return null for invalid base58 in Solana address", () => {
+      // "0x1234" is not valid base58 (contains invalid chars)
+      expect(parseStealthMetaAddress("sip:solana:0x1234:0x5678")).toBeNull()
     })
 
     it("should roundtrip with formatStealthMetaAddress", () => {
       const original = {
         chain: "solana",
-        spendingKey: "0xabcdef123456",
-        viewingKey: "0x987654fedcba",
+        spendingKey: SPENDING_KEY_HEX,
+        viewingKey: VIEWING_KEY_HEX,
       }
       const formatted = formatStealthMetaAddress(original)
       const parsed = parseStealthMetaAddress(formatted)

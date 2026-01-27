@@ -298,6 +298,22 @@ export default function SendScreen() {
                   <Text className="text-dark-400 mr-1">📋</Text>
                   <Text className="text-dark-400 text-sm">Contacts</Text>
                 </TouchableOpacity>
+                {/* DEBUG: Test stealth address button */}
+                {__DEV__ && (
+                  <TouchableOpacity
+                    className="flex-row items-center bg-cyan-800 rounded-lg px-3 py-2"
+                    onPress={() => {
+                      // Valid ed25519 test keys for Anchor shielded_transfer
+                      const testStealth =
+                        "sip:solana:9qi3ir8FT4pP48b9VAbkqVt5XSc9LoLTXC5X7nfPvNLb:BZFQo2BsXgRca6wcbnQkDB3XLiaFwDpz6uMz4NkCxRVQ"
+                      setRecipient(testStealth)
+                      handleRecipientChange(testStealth)
+                    }}
+                  >
+                    <Text className="text-cyan-300 mr-1">🧪</Text>
+                    <Text className="text-cyan-300 text-sm">Test Stealth</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
 
