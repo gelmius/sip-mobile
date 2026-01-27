@@ -19,6 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context"
 import { router } from "expo-router"
 import { useState } from "react"
 import { useScanPayments } from "@/hooks/useScanPayments"
+import { useClaim } from "@/hooks/useClaim"
 import { useWalletStore } from "@/stores/wallet"
 import { useToastStore } from "@/stores/toast"
 import { Button } from "@/components/ui"
@@ -110,8 +111,12 @@ export default function ScanScreen() {
     cancelScan,
     getLastScanTime,
   } = useScanPayments()
+  const { getClaimableAmount } = useClaim()
   const { isConnected } = useWalletStore()
   const { addToast } = useToastStore()
+
+  // Get unclaimed payments count
+  const { amount: unclaimedAmount, count: unclaimedCount } = getClaimableAmount()
 
   const [hasScannedOnce, setHasScannedOnce] = useState(false)
 
@@ -285,6 +290,32 @@ export default function ScanScreen() {
               <Text className="text-red-400">{error}</Text>
             </View>
           )}
+
+          {/* Unclaimed Payments Banner - shows when no new payments but unclaimed exist */}
+          {hasScannedOnce &&
+            lastScanResult?.found === 0 &&
+            unclaimedCount > 0 &&
+            !isScanning && (
+              <TouchableOpacity
+                className="mt-4 bg-green-900/20 border border-green-700 rounded-xl p-4"
+                onPress={() => router.push("/claim")}
+              >
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-row items-center gap-3">
+                    <Text className="text-2xl">💰</Text>
+                    <View>
+                      <Text className="text-green-400 font-medium">
+                        {unclaimedCount} Unclaimed Payment{unclaimedCount !== 1 ? "s" : ""}
+                      </Text>
+                      <Text className="text-dark-400 text-sm">
+                        {unclaimedAmount.toFixed(4)} SOL ready to claim
+                      </Text>
+                    </View>
+                  </View>
+                  <Text className="text-green-400 font-bold">→</Text>
+                </View>
+              </TouchableOpacity>
+            )}
 
           {/* Scan Button */}
           <View className="mt-6">

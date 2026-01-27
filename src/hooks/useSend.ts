@@ -242,7 +242,7 @@ export function useSend(): UseSendReturn {
 
         // Prepare transaction based on address type
         let recipientAddress = params.recipient
-        let stealthData: { ephemeralPubKey: string } | null = null
+        let stealthData: { ephemeralPubKey: string; ephemeralPrivateKey: string } | null = null
 
         if (addressValidation.type === "stealth") {
           // Parse stealth meta-address
@@ -252,14 +252,18 @@ export function useSend(): UseSendReturn {
           }
 
           // Generate one-time stealth address
-          const { stealthAddress } = await generateStealthAddress(metaAddress)
+          // IMPORTANT: This returns the ephemeralPrivateKey needed for buildShieldedTransfer
+          const { stealthAddress, ephemeralPrivateKey } = await generateStealthAddress(metaAddress)
 
           // Convert hex address to base58 for Solana
           const bs58 = await import("bs58")
           const addressBytes = hexToBytes(stealthAddress.address)
           recipientAddress = bs58.default.encode(addressBytes)
 
-          stealthData = { ephemeralPubKey: stealthAddress.ephemeralPublicKey }
+          stealthData = {
+            ephemeralPubKey: stealthAddress.ephemeralPublicKey,
+            ephemeralPrivateKey,  // Pass this to buildShieldedTransfer!
+          }
         }
 
         setStatus("signing")
@@ -289,12 +293,14 @@ export function useSend(): UseSendReturn {
           const client = getSipPrivacyClient(connection)
 
           // Build shielded transfer parameters
+          // CRITICAL: Must pass the same ephemeral key used to derive stealthPubkey!
           const transferParams: ShieldedTransferParams = {
             amount: parseFloat(params.amount),
             stealthPubkey: new PublicKey(recipientAddress),
             recipientSpendingKey: hexToBytes(metaAddress.spendingKey),
             recipientViewingKey: hexToBytes(metaAddress.viewingKey),
             memo: params.memo,
+            ephemeralPrivateKey: hexToBytes(stealthData.ephemeralPrivateKey),
           }
 
           // Build the shielded transfer transaction

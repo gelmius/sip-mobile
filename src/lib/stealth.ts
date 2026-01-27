@@ -9,6 +9,7 @@
 
 import { ed25519 } from "@noble/curves/ed25519"
 import { sha256 } from "@noble/hashes/sha256"
+import { sha512 } from "@noble/hashes/sha512"
 import * as Crypto from "expo-crypto"
 import bs58 from "bs58"
 
@@ -89,13 +90,14 @@ function bigIntToBytes(n: bigint, length: number): Uint8Array {
 
 /**
  * Get ed25519 scalar from private key
- * This follows the ed25519 key derivation specification
+ * This follows the ed25519 key derivation specification (RFC 8032)
+ * IMPORTANT: ed25519 uses SHA512, not SHA256!
  */
 function getEd25519Scalar(privateKey: Uint8Array): bigint {
-  // Hash the private key seed
-  const h = sha256(privateKey)
-  // Take first 32 bytes
-  const scalar = h.slice(0, 32)
+  // Hash the private key seed with SHA512 (ed25519 spec requirement)
+  const h = sha512(privateKey)
+  // Take first 32 bytes (SHA512 outputs 64 bytes)
+  const scalar = new Uint8Array(h.slice(0, 32))
   // Clamp as per ed25519 spec
   scalar[0] &= 248
   scalar[31] &= 127
@@ -179,6 +181,7 @@ export async function generateStealthAddress(
 ): Promise<{
   stealthAddress: StealthAddress
   sharedSecret: string
+  ephemeralPrivateKey: string
 }> {
   // Generate ephemeral keypair
   const ephemeralPrivateKey = await generateRandomBytes(32)
@@ -220,6 +223,7 @@ export async function generateStealthAddress(
       viewTag,
     },
     sharedSecret: `0x${bytesToHex(sharedSecretHash)}`,
+    ephemeralPrivateKey: `0x${bytesToHex(ephemeralPrivateKey)}`,
   }
 }
 
@@ -237,6 +241,9 @@ export function checkStealthAddress(
   const viewingPrivBytes = hexToBytes(viewingPrivateKey)
   const ephemeralPubBytes = hexToBytes(stealthAddress.ephemeralPublicKey)
 
+  console.log("[checkStealth] Ephemeral pubkey bytes:", ephemeralPubBytes.length)
+  console.log("[checkStealth] Expected viewTag:", stealthAddress.viewTag)
+
   // Get spending scalar and reduce mod L
   const rawSpendingScalar = getEd25519Scalar(spendingPrivBytes)
   const spendingScalar = rawSpendingScalar % ED25519_ORDER
@@ -248,8 +255,11 @@ export function checkStealthAddress(
   // Hash the shared secret
   const sharedSecretHash = sha256(sharedSecretPoint.toRawBytes())
 
+  console.log("[checkStealth] Computed viewTag:", sharedSecretHash[0])
+
   // View tag check
   if (sharedSecretHash[0] !== stealthAddress.viewTag) {
+    console.log("[checkStealth] View tag MISMATCH!")
     return false
   }
 
@@ -267,7 +277,13 @@ export function checkStealthAddress(
   // Compare with provided stealth address
   const providedAddress = hexToBytes(stealthAddress.address)
 
-  return bytesToHex(expectedPubKeyBytes) === bytesToHex(providedAddress)
+  const expected = bytesToHex(expectedPubKeyBytes)
+  const provided = bytesToHex(providedAddress)
+  console.log("[checkStealth] Expected:", expected.slice(0, 16) + "...")
+  console.log("[checkStealth] Provided:", provided.slice(0, 16) + "...")
+  console.log("[checkStealth] Match:", expected === provided)
+
+  return expected === provided
 }
 
 // ─── Private Key Derivation ────────────────────────────────────────────────

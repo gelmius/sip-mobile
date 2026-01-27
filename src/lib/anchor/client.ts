@@ -36,6 +36,12 @@ export interface ShieldedTransferParams {
   recipientViewingKey: Uint8Array
   /** Optional memo (not used in current implementation) */
   memo?: string
+  /**
+   * Optional ephemeral private key from generateStealthAddress.
+   * If provided, uses this key for shared secret derivation instead of generating new one.
+   * CRITICAL: Must be the same key used to derive the stealthPubkey!
+   */
+  ephemeralPrivateKey?: Uint8Array
 }
 
 export interface ShieldedTransferResult {
@@ -155,8 +161,27 @@ export class SipPrivacyClient {
     // Convert SOL to lamports
     const lamports = BigInt(Math.floor(params.amount * LAMPORTS_PER_SOL))
 
-    // Generate ephemeral keypair
-    const ephemeralKeyPair = await generateEphemeralKeyPair()
+    // Use provided ephemeral key or generate new one
+    // CRITICAL: If stealth address was pre-generated, must use the same ephemeral key!
+    let ephemeralKeyPair: { privateKey: Uint8Array; publicKey: Uint8Array }
+    if (params.ephemeralPrivateKey) {
+      // Use provided ephemeral key from generateStealthAddress
+      const { ed25519 } = await import("@noble/curves/ed25519")
+      const publicKeyRaw = ed25519.getPublicKey(params.ephemeralPrivateKey)
+      // Convert to 33-byte compressed format (0x02 prefix + 32 bytes)
+      const publicKey = new Uint8Array(33)
+      publicKey[0] = 0x02
+      publicKey.set(publicKeyRaw, 1)
+      ephemeralKeyPair = {
+        privateKey: params.ephemeralPrivateKey,
+        publicKey,
+      }
+      console.log("Using provided ephemeral key for stealth transfer")
+    } else {
+      // Generate new ephemeral keypair (only for non-stealth transfers)
+      ephemeralKeyPair = await generateEphemeralKeyPair()
+      console.log("Generated new ephemeral key (no pre-generated key provided)")
+    }
 
     // Derive shared secret for amount encryption
     const sharedSecret = deriveSharedSecret(
@@ -368,3 +393,171 @@ export function getSipPrivacyClient(
 export function resetSipPrivacyClient(): void {
   clientInstance = null
 }
+
+// ─── Transfer Record Types & Parsing ─────────────────────────────────────────
+
+export interface TransferRecordData {
+  pubkey: PublicKey
+  sender: PublicKey
+  stealthRecipient: PublicKey
+  amountCommitment: Uint8Array
+  ephemeralPubkey: Uint8Array
+  viewingKeyHash: Uint8Array
+  encryptedAmount: {
+    nonce: Uint8Array
+    ciphertext: Uint8Array
+  }
+  timestamp: bigint
+  claimed: boolean
+  tokenMint: PublicKey | null
+  bump: number
+}
+
+// Transfer record discriminator: SHA256("account:TransferRecord").slice(0, 8)
+const TRANSFER_RECORD_DISCRIMINATOR = Buffer.from([
+  0xc8, 0x1f, 0x06, 0x9e, 0xf0, 0x19, 0xf8, 0x35,
+])
+
+/**
+ * Parse a TransferRecord account
+ *
+ * Layout (after 8-byte discriminator):
+ * - 32 bytes: sender
+ * - 32 bytes: stealth_recipient
+ * - 33 bytes: amount_commitment
+ * - 33 bytes: ephemeral_pubkey
+ * - 32 bytes: viewing_key_hash
+ * - 4 bytes: encrypted_amount length (u32 LE)
+ * - variable: encrypted_amount (nonce 24 bytes + ciphertext)
+ * - 8 bytes: timestamp (i64 LE)
+ * - 1 byte: claimed (bool)
+ * - 1 byte: token_mint option flag
+ * - 32 bytes: token_mint (if option flag is 1)
+ * - 1 byte: bump
+ */
+function parseTransferRecord(
+  pubkey: PublicKey,
+  data: Buffer
+): TransferRecordData | null {
+  try {
+    // Check discriminator
+    const discriminator = data.slice(0, 8)
+    if (!discriminator.equals(TRANSFER_RECORD_DISCRIMINATOR)) {
+      return null
+    }
+
+    let offset = 8
+
+    // sender (32 bytes)
+    const sender = new PublicKey(data.slice(offset, offset + 32))
+    offset += 32
+
+    // stealth_recipient (32 bytes)
+    const stealthRecipient = new PublicKey(data.slice(offset, offset + 32))
+    offset += 32
+
+    // amount_commitment (33 bytes)
+    const amountCommitment = new Uint8Array(data.slice(offset, offset + 33))
+    offset += 33
+
+    // ephemeral_pubkey (33 bytes)
+    const ephemeralPubkey = new Uint8Array(data.slice(offset, offset + 33))
+    offset += 33
+
+    // viewing_key_hash (32 bytes)
+    const viewingKeyHash = new Uint8Array(data.slice(offset, offset + 32))
+    offset += 32
+
+    // encrypted_amount (length-prefixed)
+    const encryptedLen = data.readUInt32LE(offset)
+    offset += 4
+    const encryptedData = data.slice(offset, offset + encryptedLen)
+    offset += encryptedLen
+
+    // NaCl secretbox: nonce (24 bytes) + ciphertext (rest)
+    const nonce = new Uint8Array(encryptedData.slice(0, 24))
+    const ciphertext = new Uint8Array(encryptedData.slice(24))
+
+    // timestamp (i64 LE)
+    const timestamp = data.readBigInt64LE(offset)
+    offset += 8
+
+    // claimed (bool)
+    const claimed = data[offset] === 1
+    offset += 1
+
+    // token_mint (Option<Pubkey>)
+    const tokenMintFlag = data[offset]
+    offset += 1
+    let tokenMint: PublicKey | null = null
+    if (tokenMintFlag === 1) {
+      tokenMint = new PublicKey(data.slice(offset, offset + 32))
+      offset += 32
+    }
+
+    // bump
+    const bump = data[offset]
+
+    return {
+      pubkey,
+      sender,
+      stealthRecipient,
+      amountCommitment,
+      ephemeralPubkey,
+      viewingKeyHash,
+      encryptedAmount: { nonce, ciphertext },
+      timestamp,
+      claimed,
+      tokenMint,
+      bump,
+    }
+  } catch (err) {
+    console.error("Failed to parse transfer record:", err)
+    return null
+  }
+}
+
+/**
+ * Fetch all transfer records from the program
+ */
+export async function fetchAllTransferRecords(
+  connection: Connection,
+  programId: PublicKey = SIP_PRIVACY_PROGRAM_ID
+): Promise<TransferRecordData[]> {
+  try {
+    // Get all accounts owned by the program
+    const accounts = await connection.getProgramAccounts(programId, {
+      filters: [
+        // Filter by discriminator to get only TransferRecord accounts
+        {
+          memcmp: {
+            offset: 0,
+            bytes: bs58.encode(TRANSFER_RECORD_DISCRIMINATOR),
+          },
+        },
+      ],
+    })
+
+    console.log(`Found ${accounts.length} transfer record accounts`)
+
+    const records: TransferRecordData[] = []
+
+    for (const { pubkey, account } of accounts) {
+      const record = parseTransferRecord(pubkey, account.data as Buffer)
+      if (record) {
+        records.push(record)
+      }
+    }
+
+    // Sort by timestamp (newest first)
+    records.sort((a, b) => Number(b.timestamp - a.timestamp))
+
+    return records
+  } catch (err) {
+    console.error("Failed to fetch transfer records:", err)
+    return []
+  }
+}
+
+// Re-export bs58 for use in fetchAllTransferRecords
+import bs58 from "bs58"

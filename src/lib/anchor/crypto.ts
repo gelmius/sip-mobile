@@ -7,11 +7,13 @@
 
 import { ed25519 } from "@noble/curves/ed25519"
 import { sha256 as nobleSha256 } from "@noble/hashes/sha256"
+import { sha512 as nobleSha512 } from "@noble/hashes/sha512"
 import nacl from "tweetnacl"
 import * as Crypto from "expo-crypto"
 
-// Re-export sha256 to avoid deprecation warnings
+// Re-export hash functions to avoid deprecation warnings
 const sha256 = (data: Uint8Array): Uint8Array => nobleSha256(data)
+const sha512 = (data: Uint8Array): Uint8Array => nobleSha512(data)
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -232,7 +234,8 @@ export function deriveSharedSecret(
   recipientSpendingPubKey: Uint8Array
 ): Uint8Array {
   // Derive scalar from private key
-  const hash = sha256(ephemeralPrivateKey)
+  // IMPORTANT: ed25519 uses SHA512, not SHA256! (RFC 8032)
+  const hash = sha512(ephemeralPrivateKey)
   const scalar = new Uint8Array(32)
   scalar.set(hash.slice(0, 32))
   // Clamp as per ed25519 spec

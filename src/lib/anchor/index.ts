@@ -45,7 +45,9 @@ export {
   SipPrivacyClient,
   getSipPrivacyClient,
   resetSipPrivacyClient,
+  fetchAllTransferRecords,
   type ShieldedTransferParams,
   type ShieldedTransferResult,
   type ProgramState,
+  type TransferRecordData,
 } from "./client"

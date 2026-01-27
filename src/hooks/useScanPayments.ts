@@ -5,23 +5,33 @@
  * Implements EIP-5564 style scanning with Ed25519/secp256k1 support.
  *
  * Scanning process:
- * 1. Fetch announcements from the chain (ephemeral pubkeys)
- * 2. For each announcement, compute shared secret with viewing key
+ * 1. Fetch transfer records from the SIP program
+ * 2. For each record, compute shared secret with spending private key
  * 3. Derive expected stealth address
- * 4. Check if derived address matches the announcement
- * 5. If match, user owns this payment - add to store
+ * 4. Check if derived address matches the record's stealth recipient
+ * 5. If match, user owns this payment - decrypt amount and add to store
  */
 
 import { useState, useCallback, useRef, useMemo } from "react"
 import * as SecureStore from "expo-secure-store"
+import { Connection, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { usePrivacyStore } from "@/stores/privacy"
 import { useWalletStore } from "@/stores/wallet"
 import { useSettingsStore } from "@/stores/settings"
-import type { PaymentRecord, PrivacyLevel } from "@/types"
+import type { PaymentRecord } from "@/types"
 import {
   checkStealthAddress,
+  bytesToHex,
   type StealthAddress,
 } from "@/lib/stealth"
+import {
+  fetchAllTransferRecords,
+  type TransferRecordData,
+} from "@/lib/anchor/client"
+import { decryptAmount, deriveSharedSecret } from "@/lib/anchor/crypto"
+import { ed25519 } from "@noble/curves/ed25519"
+import { sha256 } from "@noble/hashes/sha256"
+import { sha512 } from "@noble/hashes/sha512"
 
 // ============================================================================
 // TYPES
@@ -69,93 +79,118 @@ const BATCH_SIZE = 50
 const SCAN_DELAY_MS = 100 // Delay between batches for UI responsiveness
 
 // ============================================================================
-// MOCK DATA (Replace with real chain queries)
+// HELPERS
 // ============================================================================
 
-interface MockAnnouncement {
-  id: string
-  ephemeralPubKey: string
-  stealthAddress: string
-  amount: string
-  token: string
-  timestamp: number
-  txHash: string
-  privacyLevel: PrivacyLevel
-}
-
 /**
- * Generate mock announcements for testing
- * In production, these come from on-chain events or indexer
- */
-function generateMockAnnouncements(count: number): MockAnnouncement[] {
-  const announcements: MockAnnouncement[] = []
-  const now = Date.now()
-
-  for (let i = 0; i < count; i++) {
-    const isOurs = Math.random() < 0.3 // 30% chance payment is ours
-    const daysAgo = Math.floor(Math.random() * 30)
-
-    announcements.push({
-      id: `ann_${now}_${i}`,
-      ephemeralPubKey: `02${generateRandomHex(32)}`,
-      stealthAddress: isOurs ? "MATCH" : `stealth_${generateRandomHex(16)}`,
-      amount: (Math.random() * 10).toFixed(4),
-      token: "SOL",
-      timestamp: now - daysAgo * 86400000,
-      txHash: generateRandomHex(64),
-      privacyLevel: Math.random() > 0.2 ? "shielded" : "compliant",
-    })
-  }
-
-  return announcements.sort((a, b) => b.timestamp - a.timestamp)
-}
-
-function generateRandomHex(length: number): string {
-  const array = new Uint8Array(length)
-  for (let i = 0; i < length; i++) {
-    array[i] = Math.floor(Math.random() * 256)
-  }
-  return Array.from(array)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("")
-}
-
-/**
- * Check if an announcement belongs to the user using real cryptographic verification
+ * Check if a transfer record belongs to the user using cryptographic verification
  *
  * Uses the stealth library's checkStealthAddress which performs:
  * 1. ECDH with spending private key and ephemeral public key
  * 2. Hash the shared secret
  * 3. Quick view tag check
  * 4. Full derivation and comparison if view tag matches
- *
- * Note: In mock mode, we fallback to the pre-set flag since mock announcements
- * don't have valid cryptographic keys.
  */
-function checkAnnouncementOwnership(
-  announcement: MockAnnouncement,
+function checkRecordOwnership(
+  record: TransferRecordData,
   spendingPrivateKey: string,
-  viewingPrivateKey: string,
-  useMock: boolean = true // Remove this flag when using real indexer
+  viewingPrivateKey: string
 ): boolean {
-  // Mock mode: use pre-set flag
-  if (useMock) {
-    return announcement.stealthAddress === "MATCH"
-  }
-
-  // Real mode: use cryptographic verification
   try {
+    // Extract ephemeral pubkey (skip 1-byte prefix for ed25519 format)
+    const ephemeralBytes = new Uint8Array(record.ephemeralPubkey.slice(1))
+    const ephemeralHex = `0x${bytesToHex(ephemeralBytes)}`
+
+    // Get stealth recipient address
+    const stealthBytes = record.stealthRecipient.toBytes()
+    const stealthHex = `0x${bytesToHex(stealthBytes)}`
+
+    console.log("=== Checking ownership for record ===")
+    console.log("Stealth recipient:", record.stealthRecipient.toBase58())
+    console.log("Ephemeral pubkey:", ephemeralHex.slice(0, 24) + "...")
+
+    // Derive spending scalar from private key
+    // IMPORTANT: ed25519 uses SHA512, not SHA256! (RFC 8032)
+    const spendingPrivBytes = hexToBytes(spendingPrivateKey)
+    const spendHash = sha512(spendingPrivBytes)
+    const scalar = new Uint8Array(32)
+    scalar.set(spendHash.slice(0, 32))
+    // Clamp as per ed25519 spec
+    scalar[0] &= 248
+    scalar[31] &= 127
+    scalar[31] |= 64
+
+    // Convert to BigInt (little-endian)
+    let scalarBigInt = 0n
+    for (let i = 31; i >= 0; i--) {
+      scalarBigInt = (scalarBigInt << 8n) | BigInt(scalar[i])
+    }
+    const ED25519_ORDER = BigInt("0x1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3ed")
+    scalarBigInt = scalarBigInt % ED25519_ORDER
+
+    // Compute shared secret: S = spending_scalar * ephemeral_pubkey
+    const ephemeralPoint = ed25519.ExtendedPoint.fromHex(ephemeralBytes)
+    const sharedSecretPoint = ephemeralPoint.multiply(scalarBigInt)
+    const sharedSecretHash = sha256(sharedSecretPoint.toRawBytes())
+
+    // View tag is first byte of shared secret hash
+    const viewTag = sharedSecretHash[0]
+    console.log("Computed view tag:", viewTag)
+
     const stealthAddr: StealthAddress = {
-      address: announcement.stealthAddress,
-      ephemeralPublicKey: announcement.ephemeralPubKey,
-      viewTag: parseInt(announcement.ephemeralPubKey.slice(2, 4), 16), // Extract view tag
+      address: stealthHex,
+      ephemeralPublicKey: ephemeralHex,
+      viewTag,
     }
 
-    return checkStealthAddress(stealthAddr, spendingPrivateKey, viewingPrivateKey)
+    const isOwner = checkStealthAddress(stealthAddr, spendingPrivateKey, viewingPrivateKey)
+    console.log("Ownership result:", isOwner)
+    console.log("=== End ownership check ===")
+
+    return isOwner
   } catch (err) {
-    console.error("Failed to check announcement ownership:", err)
+    console.error("!!! Failed to check record ownership:", err)
     return false
   }
+}
+
+/**
+ * Derive shared secret from ephemeral pubkey and spending private key
+ * Then decrypt the amount
+ */
+function decryptRecordAmount(
+  record: TransferRecordData,
+  spendingPrivateKey: string
+): bigint | null {
+  try {
+    // Import crypto utilities
+    const { deriveSharedSecret } = require("@/lib/anchor/crypto")
+
+    // Get spending private key bytes
+    const spendingBytes = hexToBytes(spendingPrivateKey)
+
+    // Ephemeral pubkey (skip 1-byte prefix)
+    const ephemeralBytes = record.ephemeralPubkey.slice(1)
+
+    // Derive shared secret
+    const sharedSecret = deriveSharedSecret(spendingBytes, ephemeralBytes)
+
+    // Decrypt amount
+    return decryptAmount(record.encryptedAmount, sharedSecret)
+  } catch (err) {
+    console.error("Failed to decrypt amount:", err)
+    return null
+  }
+}
+
+// Import hexToBytes from stealth
+function hexToBytes(hex: string): Uint8Array {
+  const cleanHex = hex.startsWith("0x") ? hex.slice(2) : hex
+  const bytes = new Uint8Array(cleanHex.length / 2)
+  for (let i = 0; i < cleanHex.length; i += 2) {
+    bytes[i / 2] = parseInt(cleanHex.slice(i, i + 2), 16)
+  }
+  return bytes
 }
 
 // ============================================================================
@@ -164,6 +199,7 @@ function checkAnnouncementOwnership(
 
 export function useScanPayments(): UseScanPaymentsReturn {
   const { isConnected } = useWalletStore()
+  const { network } = useSettingsStore()
   const {
     payments,
     addPayment,
@@ -216,7 +252,7 @@ export function useScanPayments(): UseScanPaymentsReturn {
           stage: "fetching",
           current: 0,
           total: 0,
-          message: "Loading viewing keys...",
+          message: "Loading stealth keys...",
         })
 
         const storedKeys = await SecureStore.getItemAsync(SECURE_STORE_KEY)
@@ -225,61 +261,88 @@ export function useScanPayments(): UseScanPaymentsReturn {
         }
 
         const keys = JSON.parse(storedKeys)
-        const { viewingPrivateKey, spendingPrivateKey } = keys
+        const { viewingPrivateKey, spendingPrivateKey, viewingPublicKey, spendingPublicKey } = keys
 
         if (!viewingPrivateKey || !spendingPrivateKey) {
           throw new Error("Stealth keys not found")
         }
+
+        // Debug: verify stored keys match derived public keys
+        console.log("=== Stored keys debug ===")
+        console.log("Spending pub (stored):", spendingPublicKey?.slice(0, 24) + "...")
+        console.log("Viewing pub (stored):", viewingPublicKey?.slice(0, 24) + "...")
+
+        // Derive public keys from private keys to verify consistency
+        const spendPrivBytes = hexToBytes(spendingPrivateKey)
+        const viewPrivBytes = hexToBytes(viewingPrivateKey)
+        const derivedSpendPub = ed25519.getPublicKey(spendPrivBytes)
+        const derivedViewPub = ed25519.getPublicKey(viewPrivBytes)
+        console.log("Spending pub (derived):", "0x" + bytesToHex(derivedSpendPub).slice(0, 20) + "...")
+        console.log("Viewing pub (derived):", "0x" + bytesToHex(derivedViewPub).slice(0, 20) + "...")
+        console.log("=== End keys debug ===")
 
         // Check for cancellation
         if (cancelRef.current) {
           throw new Error("Scan cancelled")
         }
 
-        // Stage 2: Fetch announcements
+        // Stage 2: Fetch transfer records from blockchain
         setProgress({
           stage: "fetching",
           current: 0,
           total: 0,
-          message: "Fetching payment announcements...",
+          message: "Fetching on-chain transfer records...",
         })
 
-        // Simulate network delay
-        await new Promise((resolve) => setTimeout(resolve, 500))
+        // Setup connection
+        const connection = new Connection(
+          network === "mainnet"
+            ? "https://api.mainnet-beta.solana.com"
+            : "https://api.devnet.solana.com",
+          { commitment: "confirmed" }
+        )
 
-        // Get mock announcements (in production, query indexer/RPC)
-        const limit = options.limit || 100
-        const announcements = generateMockAnnouncements(limit)
+        // Fetch all transfer records from the SIP program
+        const records = await fetchAllTransferRecords(connection)
+        console.log(`Fetched ${records.length} transfer records from chain`)
 
         // Filter by timestamp if provided
-        const filteredAnnouncements = options.fromTimestamp
-          ? announcements.filter((a) => a.timestamp > options.fromTimestamp!)
-          : announcements
+        const filteredRecords = options.fromTimestamp
+          ? records.filter(
+              (r) => Number(r.timestamp) * 1000 > options.fromTimestamp!
+            )
+          : records
 
-        const total = filteredAnnouncements.length
+        // Apply limit
+        const limit = options.limit || 100
+        const limitedRecords = filteredRecords.slice(0, limit)
+
+        const total = limitedRecords.length
 
         if (total === 0) {
           setProgress({
             stage: "complete",
             current: 0,
             total: 0,
-            message: "No new announcements to scan",
+            message: "No transfer records found on-chain",
           })
           setLastScanResult(result)
           return result
         }
 
-        // Stage 3: Scan announcements
+        // Stage 3: Scan records for ownership
         setProgress({
           stage: "scanning",
           current: 0,
           total,
-          message: `Scanning ${total} announcements...`,
+          message: `Scanning ${total} transfer records...`,
         })
 
         // Get existing payment IDs to avoid duplicates
-        const existingTxHashes = new Set(
-          payments.map((p) => p.txHash).filter(Boolean)
+        const existingAddresses = new Set(
+          payments
+            .filter((p) => p.stealthAddress)
+            .map((p) => p.stealthAddress)
         )
 
         // Process in batches
@@ -289,43 +352,76 @@ export function useScanPayments(): UseScanPaymentsReturn {
             throw new Error("Scan cancelled")
           }
 
-          const batch = filteredAnnouncements.slice(i, i + BATCH_SIZE)
+          const batch = limitedRecords.slice(i, i + BATCH_SIZE)
 
-          for (const announcement of batch) {
+          for (const record of batch) {
             result.scanned++
+            console.warn(`[SCAN] Processing record ${result.scanned}: ${record.pubkey.toBase58()}`)
 
-            // Check if we already have this payment
-            if (existingTxHashes.has(announcement.txHash)) {
+            // Skip already claimed records
+            if (record.claimed) {
+              console.warn("[SCAN] Skipping - already claimed")
               continue
             }
 
+            // Generate unique ID for this record
+            const recordId = record.pubkey.toBase58()
+
+            // Check if we already have this payment
+            if (existingAddresses.has(recordId)) {
+              console.warn("[SCAN] Skipping - already in store")
+              continue
+            }
+
+            console.warn("[SCAN] Checking ownership...")
             // Check ownership using stealth keys
-            const isOurs = checkAnnouncementOwnership(
-              announcement,
+            const isOurs = checkRecordOwnership(
+              record,
               spendingPrivateKey,
-              viewingPrivateKey,
-              true // Use mock mode until real indexer is available
+              viewingPrivateKey
             )
+            console.warn(`[SCAN] Ownership result: ${isOurs}`)
 
             if (isOurs) {
               result.found++
+
+              // Try to decrypt the amount
+              let amountSol = "0"
+              const decryptedAmount = decryptRecordAmount(
+                record,
+                spendingPrivateKey
+              )
+              if (decryptedAmount !== null) {
+                amountSol = (Number(decryptedAmount) / LAMPORTS_PER_SOL).toFixed(
+                  4
+                )
+              }
+
+              // Build stealth address in claim-compatible format
+              // Format: sip:solana:<ephemeralPubKeyHex>:<stealthRecipientBase58>
+              // Skip first byte of ephemeralPubkey (0x02 prefix)
+              const ephemeralBytes = record.ephemeralPubkey.slice(1)
+              const ephemeralHex = `0x${bytesToHex(ephemeralBytes)}`
+              const stealthRecipientBase58 = record.stealthRecipient.toBase58()
+              const claimableStealthAddress = `sip:solana:${ephemeralHex}:${stealthRecipientBase58}`
 
               // Create payment record
               const payment: PaymentRecord = {
                 id: `payment_${Date.now()}_${result.found}`,
                 type: "receive",
-                amount: announcement.amount,
-                token: announcement.token,
+                amount: amountSol,
+                token: record.tokenMint ? "SPL" : "SOL",
                 status: "completed",
-                stealthAddress: `sip:solana:${announcement.ephemeralPubKey}:derived`,
-                txHash: announcement.txHash,
-                timestamp: announcement.timestamp,
-                privacyLevel: announcement.privacyLevel,
+                stealthAddress: claimableStealthAddress,
+                txHash: record.pubkey.toBase58(), // Use PDA as reference
+                timestamp: Number(record.timestamp) * 1000, // Convert to ms
+                privacyLevel: "shielded",
                 claimed: false,
               }
 
               result.newPayments.push(payment)
               addPayment(payment)
+              console.log(`Found payment: ${amountSol} SOL to ${record.stealthRecipient.toBase58()}`)
             }
           }
 
@@ -334,7 +430,7 @@ export function useScanPayments(): UseScanPaymentsReturn {
             stage: "scanning",
             current: Math.min(i + BATCH_SIZE, total),
             total,
-            message: `Scanned ${Math.min(i + BATCH_SIZE, total)}/${total} announcements, found ${result.found}`,
+            message: `Scanned ${Math.min(i + BATCH_SIZE, total)}/${total} records, found ${result.found}`,
           })
 
           // Small delay for UI responsiveness
@@ -346,7 +442,7 @@ export function useScanPayments(): UseScanPaymentsReturn {
           stage: "complete",
           current: total,
           total,
-          message: `Found ${result.found} payment${result.found !== 1 ? "s" : ""} in ${total} announcements`,
+          message: `Found ${result.found} payment${result.found !== 1 ? "s" : ""} in ${total} records`,
         })
 
         setLastScanTimestamp(Date.now())
@@ -382,7 +478,7 @@ export function useScanPayments(): UseScanPaymentsReturn {
         setScanning(false)
       }
     },
-    [isConnected, payments, addPayment, setScanning, setLastScanTimestamp]
+    [isConnected, network, payments, addPayment, setScanning, setLastScanTimestamp]
   )
 
   const cancelScan = useCallback(() => {
