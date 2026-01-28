@@ -9,6 +9,7 @@ import { usePrivacyStore } from '@/stores/privacy'
 import { useSwapStore } from '@/stores/swap'
 import { useSettingsStore } from '@/stores/settings'
 import { useToastStore } from '@/stores/toast'
+import { PRIVACY_PROVIDERS } from '@/privacy-providers'
 import type { PrivacyLevel } from '@/types'
 
 // Privacy Level options
@@ -32,6 +33,14 @@ const PRIVACY_LEVELS: { id: PrivacyLevel; name: string; description: string; ico
     icon: '👁️',
   },
 ]
+
+// Privacy Provider options now come from @/privacy-providers (single source of truth)
+// Icon mapping for providers (UI layer)
+const PROVIDER_ICONS: Record<string, string> = {
+  'sip-native': '🛡️',
+  'privacy-cash': '💰',
+  'shadowwire': '⚡',
+}
 
 // RPC Provider options with metadata
 const RPC_PROVIDERS = [
@@ -106,18 +115,24 @@ export default function SettingsScreen() {
     setTritonEndpoint,
     defaultPrivacyLevel,
     setDefaultPrivacyLevel,
+    privacyProvider,
+    setPrivacyProvider,
   } = useSettingsStore()
   const { addToast } = useToastStore()
 
   const [showRpcModal, setShowRpcModal] = useState(false)
   const [showNetworkModal, setShowNetworkModal] = useState(false)
   const [showPrivacyLevelModal, setShowPrivacyLevelModal] = useState(false)
+  const [showPrivacyProviderModal, setShowPrivacyProviderModal] = useState(false)
   const [showAboutModal, setShowAboutModal] = useState(false)
   const [pendingProvider, setPendingProvider] = useState<typeof rpcProvider | null>(null)
   const [apiKeyInput, setApiKeyInput] = useState('')
 
   // Get current privacy level info
   const currentPrivacyLevel = PRIVACY_LEVELS.find((p) => p.id === defaultPrivacyLevel) || PRIVACY_LEVELS[0]
+
+  // Get current privacy provider info (#73)
+  const currentPrivacyProvider = PRIVACY_PROVIDERS.find((p) => p.id === privacyProvider) || PRIVACY_PROVIDERS[0]
 
   // Get app version
   const appVersion = Constants.expoConfig?.version || '0.1.0'
@@ -290,6 +305,12 @@ export default function SettingsScreen() {
             Privacy
           </Text>
           <View className="rounded-xl overflow-hidden mx-4">
+            <SettingsItem
+              icon={PROVIDER_ICONS[currentPrivacyProvider.id] || '🔒'}
+              title="Privacy Provider"
+              subtitle={`${currentPrivacyProvider.name}${currentPrivacyProvider.recommended ? ' (recommended)' : ''}`}
+              onPress={() => setShowPrivacyProviderModal(true)}
+            />
             <SettingsItem
               icon={currentPrivacyLevel.icon}
               title="Privacy Level"
@@ -692,6 +713,87 @@ export default function SettingsScreen() {
               onPress={() => setShowAboutModal(false)}
             >
               <Text className="text-dark-400 text-center font-medium">Close</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Privacy Provider Modal (#73) */}
+      <Modal
+        visible={showPrivacyProviderModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowPrivacyProviderModal(false)}
+      >
+        <Pressable
+          className="flex-1 justify-end bg-black/50"
+          onPress={() => setShowPrivacyProviderModal(false)}
+        >
+          <Pressable className="bg-dark-900 rounded-t-3xl" onPress={(e) => e.stopPropagation()}>
+            <View className="p-4 border-b border-dark-800">
+              <Text className="text-xl font-bold text-white text-center">
+                Privacy Provider
+              </Text>
+              <Text className="text-dark-400 text-center text-sm mt-1">
+                Choose your privacy engine
+              </Text>
+            </View>
+
+            <View className="p-4">
+              {PRIVACY_PROVIDERS.map((provider) => (
+                <TouchableOpacity
+                  key={provider.id}
+                  className={`flex-row items-center p-4 rounded-xl mb-2 ${
+                    privacyProvider === provider.id
+                      ? 'bg-brand-600/20 border border-brand-500'
+                      : 'bg-dark-800'
+                  }`}
+                  onPress={() => {
+                    setPrivacyProvider(provider.id)
+                    setShowPrivacyProviderModal(false)
+                    addToast({
+                      type: 'success',
+                      title: 'Provider Changed',
+                      message: `Now using ${provider.name}`,
+                    })
+                  }}
+                >
+                  <Text className="text-2xl mr-3">{PROVIDER_ICONS[provider.id] || '🔒'}</Text>
+                  <View className="flex-1">
+                    <View className="flex-row items-center">
+                      <Text className="text-white font-medium">{provider.name}</Text>
+                      {provider.recommended && (
+                        <View className="ml-2 px-2 py-0.5 bg-green-900/30 rounded">
+                          <Text className="text-green-400 text-xs">Recommended</Text>
+                        </View>
+                      )}
+                      {provider.status === 'coming-soon' && (
+                        <View className="ml-2 px-2 py-0.5 bg-yellow-900/30 rounded">
+                          <Text className="text-yellow-400 text-xs">Coming Soon</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text className="text-dark-400 text-sm">{provider.description}</Text>
+                  </View>
+                  {privacyProvider === provider.id && (
+                    <Text className="text-brand-400 text-lg">✓</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Info about viewing keys */}
+            <View className="mx-4 mb-4 p-3 bg-brand-900/20 border border-brand-700/30 rounded-xl">
+              <Text className="text-brand-400 text-sm">
+                ✨ SIP adds viewing keys to ALL providers for compliance-ready privacy.
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              className="p-4 border-t border-dark-800"
+              onPress={() => setShowPrivacyProviderModal(false)}
+            >
+              <Text className="text-dark-400 text-center font-medium">Cancel</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>

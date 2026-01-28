@@ -75,3 +75,7 @@ export type {
   AccessibilitySettings,
   UseAccessibilityReturn,
 } from "./useAccessibility"
+
+// Privacy Provider hooks (OpenRouter for Privacy)
+export { usePrivacyProvider, PRIVACY_PROVIDERS, getProviderInfo } from "./usePrivacyProvider"
+export type { UsePrivacyProviderReturn } from "./usePrivacyProvider"

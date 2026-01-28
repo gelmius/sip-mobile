@@ -74,6 +74,7 @@
 | Native Key Mgmt | ✅ Full | ❌ N/A | Mobile-only |
 | Biometric Auth | ✅ Full | ❌ N/A | Mobile-only |
 | Multi-Account | ✅ Full | 🔲 Planned | Mobile-first |
+| Privacy Providers | 🔲 In Progress | 🔲 Planned | Multi-backend support (#73) |
 
 ---
 
@@ -152,13 +153,62 @@ app/settings/backup.tsx        # View/backup recovery phrase
 
 ---
 
+## Privacy Provider Architecture (#73)
+
+**Philosophy:** "OpenRouter for Privacy" — one app, multiple privacy engines. Users choose their preferred provider.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  USER INTERFACE (Send / Swap / Settings)                    │
+├─────────────────────────────────────────────────────────────┤
+│  usePrivacyProvider Hook                                    │
+│  └── Wraps active adapter, provides send() / swap()         │
+├─────────────────────────────────────────────────────────────┤
+│  Privacy Provider Adapters (PrivacyProviderAdapter)         │
+│  ├── SIP Native     — Stealth + Pedersen + viewing keys     │
+│  ├── Privacy Cash   — Pool-based mixing + ZK proofs         │
+│  └── ShadowWire     — Bulletproofs + internal transfers     │
+├─────────────────────────────────────────────────────────────┤
+│  SIP VALUE-ADD: Viewing Keys for ALL providers              │
+│  └── Compliance layer works with any backend                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Provider Status
+
+| Provider | Status | SDK | Hackathon Bounty |
+|----------|--------|-----|------------------|
+| **SIP Native** | ✅ Complete | Built-in | — |
+| **Privacy Cash** | 🔲 Stub | `privacy-cash-sdk` | $15K |
+| **ShadowWire** | 🔲 Stub | `@radr/shadowwire` | $15K |
+
+### Key Files
+
+```
+src/privacy-providers/
+├── types.ts          # PrivacyProviderAdapter interface
+├── sip-native.ts     # SIP Native adapter (default)
+├── privacy-cash.ts   # Privacy Cash adapter (stub)
+├── shadowwire.ts     # ShadowWire adapter (stub)
+├── registry.ts       # Factory & caching
+└── index.ts          # Module exports
+
+src/hooks/usePrivacyProvider.ts  # Hook for components
+src/stores/settings.ts           # privacyProvider state
+```
+
+---
+
 ## Structure
 
 ```
-app/(tabs)/     # Tab screens (index, send, receive, swap, settings)
-src/components/ # UI components (Button, Card, Input, Modal, Toggle)
-src/stores/     # Zustand stores (wallet, settings, privacy, swap, toast)
-publishing/     # APK builds, dApp Store config
+app/(tabs)/           # Tab screens (index, send, receive, swap, settings)
+src/components/       # UI components (Button, Card, Input, Modal, Toggle)
+src/stores/           # Zustand stores (wallet, settings, privacy, swap, toast)
+src/hooks/            # Custom hooks (useNativeWallet, usePrivacyProvider, etc.)
+src/privacy-providers/# Privacy Provider adapters (#73)
+src/lib/              # Anchor client, stealth utils
+publishing/           # APK builds, dApp Store config
 ```
 
 ---
@@ -167,9 +217,11 @@ publishing/     # APK builds, dApp Store config
 
 > **Details:** [publishing/BUILD-WORKFLOW.md](publishing/BUILD-WORKFLOW.md)
 
-**APK Optimization:** ARM only, ProGuard, shrink resources (112MB → ~45MB)
+**dApp Store Portal:** https://publish.solanamobile.com (web UI for releases)
 
-**dApp Store:** Published as App NFT `2THAY9h4MaxsCtbm2WVj1gn2NMbVN3GUhLQ1EkMvqQby`
+**App NFT:** `2THAY9h4MaxsCtbm2WVj1gn2NMbVN3GUhLQ1EkMvqQby`
+
+**Publisher:** `S1PSkwV3YZD6exNiUEdfTJadyUJ1CDDUgwmQaWB5yie`
 
 **Cost/release:** ~0.025 SOL (Arweave ~0.02 + NFT rent ~0.002 + fees)
 
@@ -238,6 +290,7 @@ scrcpy --record session.mp4                    # Record
 
 ## Related Issues
 
+- [#73](https://github.com/sip-protocol/sip-mobile/issues/73) — EPIC: Privacy Provider Architecture (OpenRouter for Privacy)
 - [#61](https://github.com/sip-protocol/sip-mobile/issues/61) — EPIC: Native Wallet Architecture
 - [#67](https://github.com/sip-protocol/sip-mobile/issues/67) — useNativeWallet hook
 - [#68](https://github.com/sip-protocol/sip-mobile/issues/68) — keyStorage utilities
@@ -256,6 +309,6 @@ scrcpy --record session.mp4                    # Record
 ---
 
 **Last Updated:** 2026-01-28
-**Status:** v0.1.4 | dApp Store submitted | Native wallet complete | Seed Vault stub (pending native module)
+**Status:** v0.1.5 | dApp Store submitted | Privacy Provider Architecture (#73) in progress
 **Positioning:** Privacy in Your Pocket — consumers, daily use, native security
 **Companion:** sip-app ("Privacy Command Center" — enterprise, compliance, power users)

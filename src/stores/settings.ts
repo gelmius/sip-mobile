@@ -2,11 +2,15 @@ import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import type { PrivacyLevel } from "@/types"
+import type { PrivacyProviderType } from "@/privacy-providers"
 
 /**
  * Slippage presets (as percentages)
  */
 export const SLIPPAGE_PRESETS = [0.1, 0.5, 1.0, 3.0] as const
+
+// Re-export PrivacyProviderType for convenience
+export type { PrivacyProviderType } from "@/privacy-providers"
 
 interface SettingsStore {
   // Swap settings
@@ -17,6 +21,10 @@ interface SettingsStore {
   // Privacy settings
   defaultPrivacyLevel: PrivacyLevel
   setDefaultPrivacyLevel: (level: PrivacyLevel) => void
+
+  // Privacy Provider (#73)
+  privacyProvider: PrivacyProviderType
+  setPrivacyProvider: (provider: PrivacyProviderType) => void
 
   // App settings
   biometricsEnabled: boolean
@@ -55,6 +63,10 @@ export const useSettingsStore = create<SettingsStore>()(
       // Privacy settings
       defaultPrivacyLevel: "shielded",
       setDefaultPrivacyLevel: (level) => set({ defaultPrivacyLevel: level }),
+
+      // Privacy Provider (#73) - "OpenRouter for Privacy"
+      privacyProvider: "sip-native",
+      setPrivacyProvider: (provider) => set({ privacyProvider: provider }),
 
       // App settings
       biometricsEnabled: false,
