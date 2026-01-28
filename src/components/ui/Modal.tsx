@@ -34,11 +34,15 @@ export function Modal({
       <Pressable
         className="flex-1 bg-black/60 justify-end"
         onPress={onClose}
+        accessibilityLabel="Close modal"
+        accessibilityHint="Tap to close"
       >
         {/* Content container - stop propagation */}
         <Pressable
           className="bg-dark-950 rounded-t-3xl max-h-[90%]"
           onPress={(e) => e.stopPropagation()}
+          accessibilityViewIsModal
+          accessibilityLabel={title ? `${title} dialog` : "Dialog"}
         >
           {/* Handle bar */}
           <View className="items-center pt-3 pb-2">
@@ -48,7 +52,10 @@ export function Modal({
           {/* Header */}
           {(title || showCloseButton) && (
             <View className="flex-row items-center justify-between px-4 pb-4">
-              <Text className="text-xl font-bold text-white">
+              <Text
+                className="text-xl font-bold text-white"
+                accessibilityRole="header"
+              >
                 {title ?? ""}
               </Text>
               {showCloseButton && (
@@ -56,6 +63,9 @@ export function Modal({
                   onPress={onClose}
                   className="p-2"
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close"
+                  accessibilityHint="Closes this dialog"
                 >
                   <Text className="text-2xl text-dark-400">×</Text>
                 </TouchableOpacity>
@@ -101,6 +111,8 @@ export function ConfirmModal({
         <TouchableOpacity
           className="flex-1 bg-dark-800 rounded-xl py-3 items-center"
           onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel={cancelText}
         >
           <Text className="text-white font-medium">{cancelText}</Text>
         </TouchableOpacity>
@@ -113,6 +125,8 @@ export function ConfirmModal({
             onConfirm()
             onClose()
           }}
+          accessibilityRole="button"
+          accessibilityLabel={confirmText}
         >
           <Text className="text-white font-medium">{confirmText}</Text>
         </TouchableOpacity>

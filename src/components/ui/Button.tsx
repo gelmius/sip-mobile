@@ -14,6 +14,10 @@ interface ButtonProps extends TouchableOpacityProps {
   size?: ButtonSize
   loading?: boolean
   fullWidth?: boolean
+  /** Accessibility label (defaults to children if string) */
+  accessibilityLabel?: string
+  /** Accessibility hint for screen readers */
+  accessibilityHint?: string
 }
 
 const variantStyles: Record<ButtonVariant, string> = {
@@ -52,9 +56,16 @@ export function Button({
   fullWidth = false,
   disabled,
   className,
+  accessibilityLabel,
+  accessibilityHint,
   ...props
 }: ButtonProps) {
   const isDisabled = disabled || loading
+
+  // Derive accessibility label from children if not provided
+  const a11yLabel =
+    accessibilityLabel ||
+    (typeof children === "string" ? children : undefined)
 
   return (
     <TouchableOpacity
@@ -68,6 +79,10 @@ export function Button({
       `}
       disabled={isDisabled}
       activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={a11yLabel}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled: isDisabled }}
       {...props}
     >
       {loading && (

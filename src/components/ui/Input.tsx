@@ -23,7 +23,9 @@ export function Input({
   return (
     <View className={className}>
       {label && (
-        <Text className="text-dark-400 text-sm mb-2">{label}</Text>
+        <Text className="text-dark-400 text-sm mb-2" nativeID={`${label}-label`}>
+          {label}
+        </Text>
       )}
 
       <View
@@ -47,6 +49,9 @@ export function Input({
             setIsFocused(false)
             props.onBlur?.(e)
           }}
+          accessibilityLabel={label}
+          accessibilityHint={hint}
+          accessibilityState={{ disabled: props.editable === false }}
           {...props}
         />
 
@@ -54,7 +59,13 @@ export function Input({
       </View>
 
       {error && (
-        <Text className="text-red-500 text-xs mt-1">{error}</Text>
+        <Text
+          className="text-red-500 text-xs mt-1"
+          accessibilityRole="alert"
+          accessibilityLiveRegion="polite"
+        >
+          {error}
+        </Text>
       )}
 
       {hint && !error && (
@@ -90,17 +101,22 @@ export function AmountInput({
           placeholder="0.00"
           placeholderTextColor="#71717a"
           keyboardType="numeric"
+          accessibilityLabel={label || "Amount"}
+          accessibilityHint={balance ? `Available balance: ${balance}` : undefined}
           {...props}
         />
 
         <View className="flex-row justify-between items-center mt-2">
-          <Text className="text-dark-500">
+          <Text className="text-dark-500" accessibilityLabel={balance ? `Balance: ${balance}` : undefined}>
             {balance ? `Balance: ${balance}` : ""}
           </Text>
           {onMaxPress && (
             <Text
               className="text-brand-400 font-medium"
               onPress={onMaxPress}
+              accessibilityRole="button"
+              accessibilityLabel="Use maximum amount"
+              accessibilityHint="Sets the input to your full available balance"
             >
               MAX
             </Text>
