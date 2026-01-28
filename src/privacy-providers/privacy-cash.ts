@@ -35,6 +35,7 @@ import type {
 } from "./types"
 import { debug } from "@/utils/logger"
 import { getPrivateKey, clearSensitiveData } from "@/utils/keyStorage"
+import { storeComplianceRecord } from "@/lib/compliance-records"
 import { Keypair } from "@solana/web3.js"
 import bs58 from "bs58"
 
@@ -289,6 +290,25 @@ export class PrivacyCashAdapter implements PrivacyProviderAdapter {
           recipientAddress: params.recipient,
         })
 
+        // Store compliance record with viewing key encryption
+        const tokenSymbol = Object.entries(SUPPORTED_TOKENS).find(
+          ([, t]) => t.mint === params.tokenMint
+        )?.[0] || "SPL"
+
+        const recordId = await storeComplianceRecord({
+          provider: "privacy-cash",
+          txHash: result.tx,
+          amount: params.amount,
+          token: tokenSymbol,
+          recipient: params.recipient,
+          metadata: {
+            fee: String(result.fee_base_units),
+            poolAddress: "privacy-cash-pool",
+          },
+        })
+
+        debug("Compliance record stored:", recordId)
+
         onStatusChange?.("confirmed")
 
         return {
@@ -298,6 +318,7 @@ export class PrivacyCashAdapter implements PrivacyProviderAdapter {
             provider: "privacy-cash",
             isPartial: result.isPartial,
             fee: result.fee_base_units,
+            complianceRecordId: recordId,
           },
         }
       } else {
@@ -319,6 +340,21 @@ export class PrivacyCashAdapter implements PrivacyProviderAdapter {
           recipientAddress: params.recipient,
         })
 
+        // Store compliance record with viewing key encryption
+        const solRecordId = await storeComplianceRecord({
+          provider: "privacy-cash",
+          txHash: result.tx,
+          amount: params.amount,
+          token: "SOL",
+          recipient: params.recipient,
+          metadata: {
+            fee: String(result.fee_in_lamports),
+            poolAddress: "privacy-cash-pool",
+          },
+        })
+
+        debug("Compliance record stored:", solRecordId)
+
         onStatusChange?.("confirmed")
 
         return {
@@ -328,6 +364,7 @@ export class PrivacyCashAdapter implements PrivacyProviderAdapter {
             provider: "privacy-cash",
             isPartial: result.isPartial,
             fee: result.fee_in_lamports,
+            complianceRecordId: solRecordId,
           },
         }
       }

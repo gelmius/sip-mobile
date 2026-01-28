@@ -31,6 +31,7 @@ import type {
   AdapterOptions,
 } from "./types"
 import { debug } from "@/utils/logger"
+import { storeComplianceRecord } from "@/lib/compliance-records"
 
 // ============================================================================
 // TYPES (from @radr/shadowwire)
@@ -254,6 +255,22 @@ export class ShadowWireAdapter implements PrivacyProviderAdapter {
 
       debug("ShadowWire transfer:", result.tx_signature)
 
+      // Store compliance record with viewing key encryption
+      // This is SIP's unique value-add: compliance layer on top of ShadowWire
+      const recordId = await storeComplianceRecord({
+        provider: "shadowwire",
+        txHash: result.tx_signature,
+        amount: params.amount,
+        token,
+        recipient: params.recipient,
+        metadata: {
+          transferType: DEFAULT_TRANSFER_TYPE,
+          fee: `${tokenInfo.fee}%`,
+        },
+      })
+
+      debug("Compliance record stored:", recordId)
+
       onStatusChange?.("confirmed")
 
       return {
@@ -265,6 +282,7 @@ export class ShadowWireAdapter implements PrivacyProviderAdapter {
           token,
           fee: `${tokenInfo.fee}%`,
           amountHidden: result.amount_hidden,
+          complianceRecordId: recordId,
         },
       }
     } catch (err) {

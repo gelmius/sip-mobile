@@ -209,10 +209,34 @@ src/privacy-providers/
 ├── registry.ts       # Factory & caching
 └── index.ts          # Module exports
 
+src/lib/compliance-records.ts    # Viewing key compliance layer
 src/hooks/usePrivacyProvider.ts  # Hook for components
+src/hooks/useViewingKeys.ts      # Viewing key management
+src/hooks/useCompliance.ts       # Privacy score + audit trail
 src/stores/settings.ts           # privacyProvider state
 src/utils/keyStorage.ts          # SecureStore + biometric auth
 ```
+
+### Compliance Layer (SIP's Differentiator)
+
+When using third-party providers (ShadowWire, Privacy Cash), SIP adds viewing keys on top:
+
+```
+User sends via ShadowWire/PrivacyCash
+    ↓
+Transfer completes → txHash returned
+    ↓
+Compliance record created:
+  { txHash, amount, recipient, provider, timestamp }
+    ↓
+Encrypted with viewing key (XChaCha20-Poly1305)
+    ↓
+Stored in SecureStore
+    ↓
+Auditor with viewing key can decrypt
+```
+
+This is the unique value-add: **"Privacy institutions can actually use"**
 
 ---
 
