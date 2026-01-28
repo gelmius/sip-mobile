@@ -77,6 +77,78 @@ function getTokenIcon(symbol: string): string {
   return icons[symbol] || "🪙"
 }
 
+function getNetworkDisplayName(network: "mainnet-beta" | "devnet" | "testnet"): string {
+  switch (network) {
+    case "mainnet-beta":
+      return "Mainnet"
+    case "devnet":
+      return "Devnet"
+    case "testnet":
+      return "Testnet"
+  }
+}
+
+// ============================================================================
+// MAINNET ONLY OVERLAY
+// ============================================================================
+
+interface MainnetOnlyOverlayProps {
+  network: "mainnet-beta" | "devnet" | "testnet"
+  onSwitchNetwork: () => void
+  onGoBack: () => void
+}
+
+function MainnetOnlyOverlay({ network, onSwitchNetwork, onGoBack }: MainnetOnlyOverlayProps) {
+  return (
+    <SafeAreaView className="flex-1 bg-dark-950">
+      <View className="flex-1 items-center justify-center px-6">
+        {/* Icon */}
+        <View className="w-24 h-24 rounded-full bg-yellow-500/20 items-center justify-center mb-6">
+          <Text className="text-5xl">🔄</Text>
+        </View>
+
+        {/* Title */}
+        <Text className="text-2xl font-bold text-white text-center mb-2">
+          Swap Requires Mainnet
+        </Text>
+
+        {/* Current Network Badge */}
+        <View className="bg-yellow-900/30 px-3 py-1 rounded-full mb-4">
+          <Text className="text-yellow-400 text-sm">
+            Currently on {getNetworkDisplayName(network)}
+          </Text>
+        </View>
+
+        {/* Explanation */}
+        <Text className="text-dark-400 text-center leading-6 mb-8">
+          Jupiter DEX only has liquidity pools on Solana Mainnet.{"\n\n"}
+          Token swaps cannot be executed on {getNetworkDisplayName(network)}.
+        </Text>
+
+        {/* Actions */}
+        <View className="w-full gap-3">
+          <Button fullWidth size="lg" onPress={onSwitchNetwork}>
+            Switch to Mainnet
+          </Button>
+          <TouchableOpacity
+            className="py-3 items-center"
+            onPress={onGoBack}
+          >
+            <Text className="text-dark-400">Go Back</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Info */}
+        <View className="mt-8 bg-dark-900 rounded-xl p-4 border border-dark-800">
+          <Text className="text-dark-500 text-sm text-center">
+            💡 You can still test Send, Receive, and Claim on {getNetworkDisplayName(network)}
+          </Text>
+        </View>
+      </View>
+    </SafeAreaView>
+  )
+}
+
 // ============================================================================
 // COMPONENTS
 // ============================================================================
@@ -266,9 +338,23 @@ export default function SwapScreen() {
   }>()
   const { isConnected } = useWalletStore()
   const { isPreviewMode } = useSwapStore()
-  const { slippage: storedSlippage } = useSettingsStore()
+  const { slippage: storedSlippage, network, setNetwork } = useSettingsStore()
   const { addToast } = useToastStore()
   const { authenticateForOperation } = useBiometrics()
+
+  // Check if on mainnet - swap only works on mainnet
+  const isMainnet = network === "mainnet-beta"
+
+  // Show mainnet-only overlay if not on mainnet
+  if (!isMainnet) {
+    return (
+      <MainnetOnlyOverlay
+        network={network}
+        onSwitchNetwork={() => setNetwork("mainnet-beta")}
+        onGoBack={() => router.back()}
+      />
+    )
+  }
 
   // Real balance from RPC
   const { balance: solBalance, tokenBalances, solPrice } = useBalance()
