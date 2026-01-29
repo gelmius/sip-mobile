@@ -110,18 +110,18 @@ export class ArciumAdapter implements PrivacyProviderAdapter {
   }
 
   async initialize(): Promise<void> {
+    // Always initialize connection first (required for all operations)
+    const rpcEndpoint =
+      this.options.rpcEndpoint ||
+      (this.options.network === "devnet"
+        ? "https://api.devnet.solana.com"
+        : "https://api.mainnet-beta.solana.com")
+    this.connection = new Connection(rpcEndpoint)
+
     try {
       // Dynamic import of Arcium SDK
       const arciumClient = await import("@arcium-hq/client")
       this.sdk = arciumClient as unknown as ArciumSDK
-
-      // Initialize connection
-      const rpcEndpoint =
-        this.options.rpcEndpoint ||
-        (this.options.network === "devnet"
-          ? "https://api.devnet.solana.com"
-          : "https://api.mainnet-beta.solana.com")
-      this.connection = new Connection(rpcEndpoint)
 
       // Generate ephemeral x25519 keypair for this session
       this.privateKey = this.sdk.x25519.utils.randomSecretKey()
@@ -139,7 +139,7 @@ export class ArciumAdapter implements PrivacyProviderAdapter {
       this.initialized = true
     } catch (err) {
       debug("Arcium SDK initialization failed:", err)
-      // Still mark as initialized - will use fallback mode
+      // Still mark as initialized - connection is ready, SDK features limited
       this.initialized = true
     }
   }
@@ -211,9 +211,17 @@ export class ArciumAdapter implements PrivacyProviderAdapter {
       return { isValid: false, type: "invalid", error: "Address is required" }
     }
 
-    // Arcium uses standard Solana addresses
+    const trimmed = address.trim()
+
+    // Check for SIP stealth address format: sip:solana:<spending>:<viewing>
+    const STEALTH_REGEX = /^sip:solana:[1-9A-HJ-NP-Za-km-z]{32,44}:[1-9A-HJ-NP-Za-km-z]{32,44}$/
+    if (STEALTH_REGEX.test(trimmed)) {
+      return { isValid: true, type: "stealth" }
+    }
+
+    // Regular Solana address
     const SOLANA_ADDRESS_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
-    if (SOLANA_ADDRESS_REGEX.test(address.trim())) {
+    if (SOLANA_ADDRESS_REGEX.test(trimmed)) {
       return { isValid: true, type: "regular" }
     }
 
@@ -263,6 +271,49 @@ export class ArciumAdapter implements PrivacyProviderAdapter {
   /**
    * Generate computation offset (unique per computation)
    */
+/**
+   * Fallback to SIP Native shielded transfer when Arcium SDK is not available
+   * This provides stealth address privacy but amounts are visible on-chain
+   */
+  private async sendWithSipNativeFallback(
+    params: PrivacySendParams,
+    signTransaction: (tx: Uint8Array) => Promise<Uint8Array | null>,
+    onStatusChange?: (status: PrivacySendStatus) => void
+  ): Promise<PrivacySendResult> {
+    try {
+      // Import SIP Native adapter dynamically
+      const { SipNativeAdapter } = await import("./sip-native")
+      const sipNative = new SipNativeAdapter(this.options)
+      await sipNative.initialize()
+
+      debug("Arcium: Using SIP Native fallback for transfer")
+
+      // Delegate to SIP Native
+      const result = await sipNative.send(params, signTransaction, onStatusChange)
+
+      // Add note that this used fallback
+      if (result.success) {
+        return {
+          ...result,
+          providerData: {
+            ...result.providerData,
+            provider: "arcium",
+            fallback: true,
+            note: "Used SIP Native fallback (Arcium SDK unavailable in React Native)",
+          },
+        }
+      }
+
+      return result
+    } catch (err) {
+      onStatusChange?.("error")
+      return {
+        success: false,
+        error: `Fallback failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+      }
+    }
+  }
+
   private generateComputationOffset(): bigint {
     return BigInt(Date.now()) * BigInt(1000) + BigInt(Math.floor(Math.random() * 1000))
   }
@@ -284,6 +335,13 @@ export class ArciumAdapter implements PrivacyProviderAdapter {
         success: false,
         error: "Connection not initialized",
       }
+    }
+
+    // FALLBACK: If Arcium SDK not available, use SIP Native shielded transfer
+    // This provides stealth address privacy but not MPC-encrypted amounts
+    if (!this.sdk || !this.privateKey || !this.publicKey) {
+      debug("Arcium: SDK not available, falling back to SIP Native shielded transfer")
+      return this.sendWithSipNativeFallback(params, signTransaction, onStatusChange)
     }
 
     try {

@@ -202,16 +202,32 @@ export class SipNativeAdapter implements PrivacyProviderAdapter {
         setStatus("signing")
 
         // Sign transaction
-        const signedTx = await signTransaction(transaction.serialize())
+        // IMPORTANT: Use requireAllSignatures: false since transaction is unsigned at this point
+        const signedTx = await signTransaction(
+          transaction.serialize({ requireAllSignatures: false, verifySignatures: false })
+        )
         if (!signedTx) {
           throw new Error("Transaction signing rejected")
         }
 
         setStatus("submitting")
 
-        // Deserialize and send
-        const deserializedTx = Transaction.from(signedTx)
-        txHash = await client.sendTransaction(deserializedTx)
+        // Send the signed transaction directly (already fully signed)
+        const signature = await connection.sendRawTransaction(signedTx, {
+          skipPreflight: false,
+          preflightCommitment: "confirmed",
+        })
+
+        // Wait for confirmation
+        const { blockhash: confirmBlockhash, lastValidBlockHeight } =
+          await connection.getLatestBlockhash()
+        await connection.confirmTransaction({
+          signature,
+          blockhash: confirmBlockhash,
+          lastValidBlockHeight,
+        })
+
+        txHash = signature
 
         debug("SIP Native shielded transfer:", txHash)
       } else {
@@ -233,15 +249,21 @@ export class SipNativeAdapter implements PrivacyProviderAdapter {
 
         setStatus("signing")
 
-        const signedTx = await signTransaction(transaction.serialize())
+        // IMPORTANT: Use requireAllSignatures: false since transaction is unsigned at this point
+        const signedTx = await signTransaction(
+          transaction.serialize({ requireAllSignatures: false, verifySignatures: false })
+        )
         if (!signedTx) {
           throw new Error("Transaction signing rejected")
         }
 
         setStatus("submitting")
 
-        const deserializedTx = Transaction.from(signedTx)
-        const signature = await connection.sendRawTransaction(deserializedTx.serialize())
+        // Send the signed transaction directly (already fully signed)
+        const signature = await connection.sendRawTransaction(signedTx, {
+          skipPreflight: false,
+          preflightCommitment: "confirmed",
+        })
 
         // Wait for confirmation
         const { blockhash: confirmBlockhash, lastValidBlockHeight } =

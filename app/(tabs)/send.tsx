@@ -1,12 +1,15 @@
 /**
  * Send Screen
  *
- * Privacy-aware transfer flow:
+ * Privacy-aware transfer flow using Privacy Provider architecture:
+ * - Supports multiple privacy backends (SIP Native, Arcium, Privacy Cash, etc.)
  * - Amount input with USD conversion
  * - Recipient address (stealth or regular)
  * - Privacy level selection
  * - Confirmation modal
  * - Transaction progress
+ *
+ * @see https://github.com/sip-protocol/sip-mobile/issues/73
  */
 
 import {
@@ -23,37 +26,111 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context"
 import { useState, useCallback, useEffect } from "react"
 import { router } from "expo-router"
-import { useSend } from "@/hooks/useSend"
+import * as Clipboard from "expo-clipboard"
+import { usePrivacyProvider } from "@/hooks/usePrivacyProvider"
 import { useWalletStore } from "@/stores/wallet"
 import { useSettingsStore } from "@/stores/settings"
 import { useToastStore } from "@/stores/toast"
 import { useBalance } from "@/hooks/useBalance"
-import { getProviderInfo } from "@/privacy-providers"
 import { Button, Modal, EmptyState } from "@/components/ui"
 import type { PrivacyLevel } from "@/types"
+import type { PrivacySendStatus } from "@/privacy-providers"
+
+// ============================================================================
+// VALIDATION HELPERS
+// ============================================================================
+
+const SOLANA_ADDRESS_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
+const STEALTH_ADDRESS_REGEX = /^sip:solana:[1-9A-HJ-NP-Za-km-z]{32,44}:[1-9A-HJ-NP-Za-km-z]{32,44}$/
+
+function validateAddress(address: string): { isValid: boolean; error?: string } {
+  if (!address || address.trim() === "") {
+    return { isValid: false, error: "Address is required" }
+  }
+
+  const trimmed = address.trim()
+
+  // Check stealth address format
+  if (trimmed.startsWith("sip:")) {
+    if (STEALTH_ADDRESS_REGEX.test(trimmed)) {
+      return { isValid: true }
+    }
+    return { isValid: false, error: "Invalid stealth address format" }
+  }
+
+  // Check regular Solana address
+  if (SOLANA_ADDRESS_REGEX.test(trimmed)) {
+    return { isValid: true }
+  }
+
+  return { isValid: false, error: "Invalid Solana address" }
+}
+
+function validateAmount(
+  amount: string,
+  balance: number
+): { isValid: boolean; error?: string } {
+  if (!amount || amount.trim() === "") {
+    return { isValid: false, error: "Amount is required" }
+  }
+
+  const numAmount = parseFloat(amount)
+
+  if (isNaN(numAmount) || numAmount <= 0) {
+    return { isValid: false, error: "Invalid amount" }
+  }
+
+  if (numAmount > balance) {
+    return { isValid: false, error: "Insufficient balance" }
+  }
+
+  // Minimum 0.000001 SOL
+  if (numAmount < 0.000001) {
+    return { isValid: false, error: "Amount too small (min: 0.000001 SOL)" }
+  }
+
+  return { isValid: true }
+}
+
+function isStealthAddress(address: string): boolean {
+  return address?.startsWith("sip:") && STEALTH_ADDRESS_REGEX.test(address.trim())
+}
+
+function formatUsdValue(amount: string, solPrice: number): string {
+  const num = parseFloat(amount)
+  if (isNaN(num) || num === 0 || solPrice === 0) return "$0.00"
+  return `$${(num * solPrice).toFixed(2)}`
+}
+
+// ============================================================================
+// COMPONENT
+// ============================================================================
 
 export default function SendScreen() {
+  // Privacy Provider (supports Arcium, Privacy Cash, ShadowWire, etc.)
   const {
-    status,
-    error,
-    txHash,
-    validateAddress,
-    validateAmount,
-    isStealthAddress,
     send,
-    reset,
-    getUsdValue,
-  } = useSend()
-  const { isConnected } = useWalletStore()
-  const { defaultPrivacyLevel, privacyProvider } = useSettingsStore()
-  const providerInfo = getProviderInfo(privacyProvider)
-  const { addToast } = useToastStore()
-  const { balance } = useBalance()
+    isReady: providerReady,
+    isInitializing: providerInitializing,
+    error: providerError,
+    providerInfo,
+  } = usePrivacyProvider()
 
+  const { isConnected } = useWalletStore()
+  const { defaultPrivacyLevel } = useSettingsStore()
+  const { addToast } = useToastStore()
+  const { balance, usdValue, solPrice } = useBalance()
+
+  // Form state
   const [amount, setAmount] = useState("")
   const [recipient, setRecipient] = useState("")
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
+
+  // Transaction state
+  const [status, setStatus] = useState<PrivacySendStatus>("idle")
+  const [txHash, setTxHash] = useState<string | null>(null)
+  const [txError, setTxError] = useState<string | null>(null)
 
   // Validation state
   const [addressError, setAddressError] = useState<string | null>(null)
@@ -80,24 +157,21 @@ export default function SendScreen() {
         setAmountError(null)
       }
     },
-    [validateAmount, balance]
+    [balance]
   )
 
-  const handleRecipientChange = useCallback(
-    (value: string) => {
-      setRecipient(value)
-      if (value && value.length > 10) {
-        const validation = validateAddress(value)
-        setAddressError(validation.isValid ? null : validation.error || null)
-      } else {
-        setAddressError(null)
-      }
-    },
-    [validateAddress]
-  )
+  const handleRecipientChange = useCallback((value: string) => {
+    setRecipient(value)
+    if (value && value.length > 10) {
+      const validation = validateAddress(value)
+      setAddressError(validation.isValid ? null : validation.error || null)
+    } else {
+      setAddressError(null)
+    }
+  }, [])
 
   const handleMaxAmount = useCallback(() => {
-    const maxAmount = (balance - 0.001).toFixed(6) // Leave for fees
+    const maxAmount = Math.max(0, balance - 0.001).toFixed(6) // Leave for fees
     setAmount(maxAmount)
     setAmountError(null)
   }, [balance])
@@ -118,17 +192,41 @@ export default function SendScreen() {
       return
     }
 
+    // Check provider readiness
+    if (!providerReady) {
+      addToast({
+        type: "error",
+        title: "Provider not ready",
+        message: providerError || "Please wait for provider to initialize",
+      })
+      return
+    }
+
     setShowConfirmModal(true)
-  }, [recipient, amount, balance, validateAddress, validateAmount])
+  }, [recipient, amount, balance, providerReady, providerError, addToast])
 
   const handleConfirmSend = useCallback(async () => {
-    const result = await send({
-      amount,
-      recipient,
-      privacyLevel: defaultPrivacyLevel,
-    })
+    // Reset state
+    setStatus("idle")
+    setTxError(null)
+    setTxHash(null)
 
-    if (!result.success) {
+    // Execute send via Privacy Provider
+    const result = await send(
+      {
+        amount,
+        recipient,
+        privacyLevel: defaultPrivacyLevel,
+      },
+      (newStatus) => setStatus(newStatus)
+    )
+
+    if (result.success && result.txHash) {
+      setTxHash(result.txHash)
+      setStatus("confirmed")
+    } else {
+      setTxError(result.error || "Transaction failed")
+      setStatus("error")
       addToast({
         type: "error",
         title: "Transaction failed",
@@ -141,8 +239,16 @@ export default function SendScreen() {
     setShowSuccessModal(false)
     setAmount("")
     setRecipient("")
-    reset()
-  }, [reset])
+    setStatus("idle")
+    setTxHash(null)
+    setTxError(null)
+  }, [])
+
+  const reset = useCallback(() => {
+    setStatus("idle")
+    setTxHash(null)
+    setTxError(null)
+  }, [])
 
   const getPrivacyLevelInfo = (level: PrivacyLevel) => {
     switch (level) {
@@ -203,8 +309,23 @@ export default function SendScreen() {
               Send SOL or tokens privately
             </Text>
 
+            {/* Provider Badge */}
+            {providerInfo && (
+              <View className="mt-3 flex-row items-center">
+                <View className="bg-dark-800 px-3 py-1.5 rounded-lg flex-row items-center">
+                  <Text className="text-dark-400 text-xs mr-2">Provider:</Text>
+                  <Text className="text-white text-xs font-medium">
+                    {providerInfo.name}
+                  </Text>
+                  {providerInitializing && (
+                    <ActivityIndicator size="small" color="#8b5cf6" style={{ marginLeft: 8 }} />
+                  )}
+                </View>
+              </View>
+            )}
+
             {/* Balance Display */}
-            <View className="mt-6 flex-row items-center justify-between bg-dark-900 rounded-xl p-4 border border-dark-800">
+            <View className="mt-4 flex-row items-center justify-between bg-dark-900 rounded-xl p-4 border border-dark-800">
               <View>
                 <Text className="text-dark-500 text-sm">Available Balance</Text>
                 <Text className="text-white text-xl font-bold mt-0.5">
@@ -212,7 +333,7 @@ export default function SendScreen() {
                 </Text>
               </View>
               <Text className="text-dark-400">
-                {getUsdValue(balance.toString())}
+                ≈ ${usdValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}
               </Text>
             </View>
 
@@ -240,7 +361,7 @@ export default function SendScreen() {
                   />
                   <Text className="text-dark-400 text-xl font-medium ml-2">SOL</Text>
                 </View>
-                <Text className="text-dark-500 mt-2">{getUsdValue(amount)}</Text>
+                <Text className="text-dark-500 mt-2">{formatUsdValue(amount, solPrice)}</Text>
               </View>
               {amountError && (
                 <Text className="text-red-400 text-sm mt-2">{amountError}</Text>
@@ -306,7 +427,7 @@ export default function SendScreen() {
                   <TouchableOpacity
                     className="flex-row items-center bg-cyan-800 rounded-lg px-3 py-2"
                     onPress={() => {
-                      // Valid ed25519 test keys for Anchor shielded_transfer
+                      // Valid ed25519 test keys for testing
                       const testStealth =
                         "sip:solana:9qi3ir8FT4pP48b9VAbkqVt5XSc9LoLTXC5X7nfPvNLb:BZFQo2BsXgRca6wcbnQkDB3XLiaFwDpz6uMz4NkCxRVQ"
                       setRecipient(testStealth)
@@ -387,8 +508,18 @@ export default function SendScreen() {
 
         {/* Send Button */}
         <View className="px-6 pb-6 pt-2 border-t border-dark-900">
-          <Button fullWidth size="lg" onPress={handleReview} disabled={!isValid}>
-            {defaultPrivacyLevel !== "transparent" ? "Send Privately" : "Send"}
+          <Button
+            fullWidth
+            size="lg"
+            onPress={handleReview}
+            disabled={!isValid || !providerReady}
+            loading={providerInitializing}
+          >
+            {providerInitializing
+              ? "Initializing..."
+              : defaultPrivacyLevel !== "transparent"
+              ? "Send Privately"
+              : "Send"}
           </Button>
         </View>
       </KeyboardAvoidingView>
@@ -403,7 +534,7 @@ export default function SendScreen() {
           {/* Amount Summary */}
           <View className="items-center py-4">
             <Text className="text-4xl font-bold text-white">{amount} SOL</Text>
-            <Text className="text-dark-400 mt-1">{getUsdValue(amount)}</Text>
+            <Text className="text-dark-400 mt-1">{formatUsdValue(amount, solPrice)}</Text>
           </View>
 
           {/* Details */}
@@ -437,18 +568,15 @@ export default function SendScreen() {
             <View className="flex-row justify-between items-center">
               <Text className="text-dark-500">Provider</Text>
               <View className="flex-row items-center">
-                <Text className="text-dark-300">{providerInfo?.name || 'SIP Native'}</Text>
-                {providerInfo?.status === 'coming-soon' && (
-                  <View className="ml-2 px-1.5 py-0.5 bg-yellow-900/30 rounded">
-                    <Text className="text-yellow-400 text-xs">Soon</Text>
-                  </View>
-                )}
+                <Text className="text-brand-400 font-medium">
+                  {providerInfo?.name || "SIP Native"}
+                </Text>
               </View>
             </View>
           </View>
 
           {/* Status Display */}
-          {status !== "idle" && status !== "error" && (
+          {status !== "idle" && status !== "error" && status !== "confirmed" && (
             <View className="flex-row items-center justify-center gap-2 py-2">
               <ActivityIndicator size="small" color="#8b5cf6" />
               <Text className="text-dark-400">
@@ -461,9 +589,9 @@ export default function SendScreen() {
           )}
 
           {/* Error Display */}
-          {error && (
+          {txError && (
             <View className="bg-red-900/20 border border-red-700 rounded-xl p-3">
-              <Text className="text-red-400 text-sm">{error}</Text>
+              <Text className="text-red-400 text-sm">{txError}</Text>
             </View>
           )}
 
@@ -508,12 +636,21 @@ export default function SendScreen() {
           </View>
 
           {txHash && (
-            <View className="bg-dark-900 rounded-xl p-4">
-              <Text className="text-dark-500 text-sm mb-1">Transaction Hash</Text>
+            <TouchableOpacity
+              className="bg-dark-900 rounded-xl p-4 active:bg-dark-800"
+              onPress={async () => {
+                await Clipboard.setStringAsync(txHash)
+                addToast({ title: "Copied!", type: "success" })
+              }}
+            >
+              <View className="flex-row justify-between items-center mb-1">
+                <Text className="text-dark-500 text-sm">Transaction Hash</Text>
+                <Text className="text-dark-500 text-xs">Tap to copy</Text>
+              </View>
               <Text className="text-white font-mono text-xs" numberOfLines={2}>
                 {txHash}
               </Text>
-            </View>
+            </TouchableOpacity>
           )}
 
           <Button fullWidth onPress={handleCloseSuccess}>

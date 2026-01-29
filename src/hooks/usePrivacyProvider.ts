@@ -135,6 +135,8 @@ export function usePrivacyProvider(): UsePrivacyProviderReturn {
         return null
       }
 
+      // Return the fully signed transaction
+      // The signed transaction should have all required signatures after partialSign
       return signed.serialize()
     },
     [signTransaction]
