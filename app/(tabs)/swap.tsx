@@ -33,6 +33,7 @@ import {
   useInsufficientBalance,
   useSwap,
   useBalance,
+  useTokenPrices,
   getSwapStatusMessage,
   isSwapInProgress,
   isSwapComplete,
@@ -361,6 +362,9 @@ export default function SwapScreen() {
   // Real balance from RPC
   const { balance: solBalance, tokenBalances, solPrice } = useBalance()
 
+  // Token prices from Jupiter API
+  const { getUsdValue } = useTokenPrices()
+
   // Helper to get balance for a token symbol
   const getTokenBalance = useCallback(
     (symbol: string): { balance: string; usdValue: number } | undefined => {
@@ -380,13 +384,15 @@ export default function SwapScreen() {
       const tokenBalance = tokenBalances.find((t) => t.mint === tokenInfo.mint)
       if (!tokenBalance) return { balance: "0", usdValue: 0 }
 
-      // Calculate USD value (would need price API for accurate value)
+      // Calculate USD value using Jupiter prices
+      const usdValue = getUsdValue(symbol, tokenBalance.uiAmount)
+
       return {
         balance: tokenBalance.uiAmount.toString(),
-        usdValue: 0, // TODO: Fetch token prices from Jupiter
+        usdValue,
       }
     },
-    [isConnected, solBalance, solPrice, tokenBalances]
+    [isConnected, solBalance, solPrice, tokenBalances, getUsdValue]
   )
 
   // Token state

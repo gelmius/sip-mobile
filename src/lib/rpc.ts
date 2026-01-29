@@ -299,3 +299,63 @@ export async function getSolPrice(): Promise<number> {
   console.warn("Using fallback SOL price")
   return 185.00
 }
+
+// ─── Token Prices API ─────────────────────────────────────────────────────────
+
+export interface TokenPriceData {
+  [mint: string]: {
+    price: number
+    timestamp: number
+  }
+}
+
+/**
+ * Get prices for multiple tokens from Jupiter Price API
+ * @param mints Array of token mint addresses
+ * @returns Map of mint -> price data
+ */
+export async function getTokenPrices(mints: string[]): Promise<TokenPriceData> {
+  if (mints.length === 0) return {}
+
+  try {
+    // Jupiter supports up to 100 tokens per request
+    const mintsQuery = mints.join(",")
+    const response = await fetch(`${JUPITER_PRICE_API}?ids=${mintsQuery}`)
+
+    if (!response.ok) {
+      console.warn(`Jupiter Price API returned ${response.status}`)
+      return {}
+    }
+
+    const data = await response.json()
+    const result: TokenPriceData = {}
+    const timestamp = Date.now()
+
+    // Parse response
+    if (data.data) {
+      for (const mint of mints) {
+        if (data.data[mint]?.price) {
+          result[mint] = {
+            price: Number(data.data[mint].price),
+            timestamp,
+          }
+        }
+      }
+    }
+
+    return result
+  } catch (err) {
+    console.error("Failed to fetch token prices:", err)
+    return {}
+  }
+}
+
+/**
+ * Get price for a single token
+ * @param mint Token mint address
+ * @returns Price in USD or null
+ */
+export async function getTokenPrice(mint: string): Promise<number | null> {
+  const prices = await getTokenPrices([mint])
+  return prices[mint]?.price ?? null
+}

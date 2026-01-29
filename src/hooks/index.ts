@@ -45,6 +45,8 @@ export type {
 } from "./useBiometrics"
 
 // DEX hooks
+export { useTokenPrices, formatUsdValue } from "./useTokenPrices"
+export type { UseTokenPricesResult } from "./useTokenPrices"
 export { useQuote, useExchangeRate, useInsufficientBalance } from "./useQuote"
 export type {
   QuoteParams,
