@@ -132,7 +132,8 @@ export class ShadowWireAdapter implements PrivacyProviderAdapter {
   }
 
   isReady(): boolean {
-    return this.initialized && this.client !== null
+    // Return true if initialized - fallback available when SDK not loaded
+    return this.initialized
   }
 
   supportsFeature(feature: "send" | "swap" | "viewingKeys" | "compliance"): boolean {
@@ -163,13 +164,64 @@ export class ShadowWireAdapter implements PrivacyProviderAdapter {
       return { isValid: false, type: "invalid", error: "Address is required" }
     }
 
+    const trimmed = address.trim()
+
+    // Check for SIP stealth address format: sip:solana:<spending>:<viewing>
+    const STEALTH_REGEX = /^sip:solana:[1-9A-HJ-NP-Za-km-z]{32,44}:[1-9A-HJ-NP-Za-km-z]{32,44}$/
+    if (STEALTH_REGEX.test(trimmed)) {
+      return { isValid: true, type: "stealth" }
+    }
+
     // ShadowWire uses standard Solana addresses
     const SOLANA_ADDRESS_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
-    if (SOLANA_ADDRESS_REGEX.test(address.trim())) {
+    if (SOLANA_ADDRESS_REGEX.test(trimmed)) {
       return { isValid: true, type: "regular" }
     }
 
     return { isValid: false, type: "invalid", error: "Invalid Solana address" }
+  }
+
+  /**
+   * Fallback to SIP Native shielded transfer when ShadowWire SDK is not available
+   * This provides stealth address privacy but not Bulletproof ZK proofs
+   */
+  private async sendWithSipNativeFallback(
+    params: PrivacySendParams,
+    signTransaction: (tx: Uint8Array) => Promise<Uint8Array | null>,
+    onStatusChange?: (status: PrivacySendStatus) => void
+  ): Promise<PrivacySendResult> {
+    try {
+      // Import SIP Native adapter dynamically
+      const { SipNativeAdapter } = await import("./sip-native")
+      const sipNative = new SipNativeAdapter(this.options)
+      await sipNative.initialize()
+
+      debug("ShadowWire: Using SIP Native fallback for transfer")
+
+      // Delegate to SIP Native
+      const result = await sipNative.send(params, signTransaction, onStatusChange)
+
+      // Add note that this used fallback
+      if (result.success) {
+        return {
+          ...result,
+          providerData: {
+            ...result.providerData,
+            provider: "shadowwire",
+            fallback: true,
+            note: "Used SIP Native fallback (ShadowWire SDK unavailable in React Native)",
+          },
+        }
+      }
+
+      return result
+    } catch (err) {
+      onStatusChange?.("error")
+      return {
+        success: false,
+        error: `Fallback failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+      }
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -183,17 +235,11 @@ export class ShadowWireAdapter implements PrivacyProviderAdapter {
   ): Promise<PrivacySendResult> {
     onStatusChange?.("validating")
 
-    // Check if SDK client is available
+    // FALLBACK: If ShadowWire SDK not available, use SIP Native shielded transfer
+    // This provides stealth address privacy but not Bulletproof ZK proofs
     if (!this.client) {
-      onStatusChange?.("error")
-      return {
-        success: false,
-        error: "ShadowWire SDK not initialized. Please try again.",
-        providerData: {
-          status: "sdk_not_initialized",
-          package: "@radr/shadowwire@1.1.15",
-        },
-      }
+      debug("ShadowWire: SDK not available, falling back to SIP Native shielded transfer")
+      return this.sendWithSipNativeFallback(params, signTransaction, onStatusChange)
     }
 
     try {
