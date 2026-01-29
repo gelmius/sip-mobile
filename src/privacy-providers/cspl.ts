@@ -313,7 +313,8 @@ export class CSPLAdapter implements PrivacyProviderAdapter {
   }
 
   isReady(): boolean {
-    return this.initialized && this.service !== null && this.service.isConnected()
+    // Return true if initialized - fallback available for stealth addresses
+    return this.initialized
   }
 
   supportsFeature(feature: "send" | "swap" | "viewingKeys" | "compliance"): boolean {
@@ -346,14 +347,10 @@ export class CSPLAdapter implements PrivacyProviderAdapter {
 
     const trimmed = address.trim()
 
-    // C-SPL uses regular Solana addresses (amounts are encrypted, not addresses)
-    // Stealth addresses should use SIP Native, not C-SPL directly
-    if (trimmed.startsWith("sip:")) {
-      return {
-        isValid: false,
-        type: "invalid",
-        error: "C-SPL uses regular Solana addresses. For stealth addresses, combine with SIP Native.",
-      }
+    // Check for SIP stealth address format - will use SIP Native fallback
+    const STEALTH_REGEX = /^sip:solana:[1-9A-HJ-NP-Za-km-z]{32,44}:[1-9A-HJ-NP-Za-km-z]{32,44}$/
+    if (STEALTH_REGEX.test(trimmed)) {
+      return { isValid: true, type: "stealth" }
     }
 
     // Validate Solana address format
@@ -362,6 +359,49 @@ export class CSPLAdapter implements PrivacyProviderAdapter {
     }
 
     return { isValid: false, type: "invalid", error: "Invalid Solana address format" }
+  }
+
+  /**
+   * Fallback to SIP Native shielded transfer for stealth addresses
+   * C-SPL encrypts amounts but uses regular addresses; SIP Native provides stealth addresses
+   */
+  private async sendWithSipNativeFallback(
+    params: PrivacySendParams,
+    signTransaction: (tx: Uint8Array) => Promise<Uint8Array | null>,
+    onStatusChange?: (status: PrivacySendStatus) => void
+  ): Promise<PrivacySendResult> {
+    try {
+      // Import SIP Native adapter dynamically
+      const { SipNativeAdapter } = await import("./sip-native")
+      const sipNative = new SipNativeAdapter(this.options)
+      await sipNative.initialize()
+
+      debug("C-SPL: Using SIP Native fallback for stealth address transfer")
+
+      // Delegate to SIP Native
+      const result = await sipNative.send(params, signTransaction, onStatusChange)
+
+      // Add note that this used fallback
+      if (result.success) {
+        return {
+          ...result,
+          providerData: {
+            ...result.providerData,
+            provider: "cspl",
+            fallback: true,
+            note: "Used SIP Native fallback (C-SPL encrypts amounts, SIP Native provides stealth addresses)",
+          },
+        }
+      }
+
+      return result
+    } catch (err) {
+      onStatusChange?.("error")
+      return {
+        success: false,
+        error: `Fallback failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+      }
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -414,27 +454,29 @@ export class CSPLAdapter implements PrivacyProviderAdapter {
 
   async send(
     params: PrivacySendParams,
-    _signTransaction: (tx: Uint8Array) => Promise<Uint8Array | null>,
+    signTransaction: (tx: Uint8Array) => Promise<Uint8Array | null>,
     onStatusChange?: (status: PrivacySendStatus) => void
   ): Promise<PrivacySendResult> {
     onStatusChange?.("validating")
 
-    // Check if service is ready
-    if (!this.service || !this.service.isConnected()) {
+    // Validate recipient first
+    const validation = await this.validateRecipient(params.recipient)
+    if (!validation.isValid) {
       onStatusChange?.("error")
       return {
         success: false,
-        error: "C-SPL service not initialized. Please try again.",
-        providerData: { status: "service_not_ready" },
+        error: validation.error || "Invalid address",
       }
     }
 
+    // FALLBACK: If stealth address or service not ready, use SIP Native
+    // C-SPL encrypts amounts but uses regular addresses; SIP Native provides stealth addresses
+    if (validation.type === "stealth" || !this.service || !this.service.isConnected()) {
+      debug("C-SPL: Using SIP Native fallback (stealth address or service not ready)")
+      return this.sendWithSipNativeFallback(params, signTransaction, onStatusChange)
+    }
+
     try {
-      // Validate recipient
-      const validation = await this.validateRecipient(params.recipient)
-      if (!validation.isValid) {
-        throw new Error(validation.error || "Invalid address")
-      }
 
       onStatusChange?.("preparing")
 
