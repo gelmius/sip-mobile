@@ -1,0 +1,3 @@
+[submodule "programs/sip_arcium_transfer"]
+	path = programs/sip_arcium_transfer
+	url = https://github.com/sip-protocol/sip-arcium-program.git
