@@ -111,7 +111,8 @@ export class IncoAdapter implements PrivacyProviderAdapter {
   }
 
   isReady(): boolean {
-    return this.initialized && this.encryption !== null
+    // Return true if initialized - fallback available when SDK not loaded
+    return this.initialized
   }
 
   supportsFeature(feature: "send" | "swap" | "viewingKeys" | "compliance"): boolean {
@@ -142,13 +143,64 @@ export class IncoAdapter implements PrivacyProviderAdapter {
       return { isValid: false, type: "invalid", error: "Address is required" }
     }
 
+    const trimmed = address.trim()
+
+    // Check for SIP stealth address format: sip:solana:<spending>:<viewing>
+    const STEALTH_REGEX = /^sip:solana:[1-9A-HJ-NP-Za-km-z]{32,44}:[1-9A-HJ-NP-Za-km-z]{32,44}$/
+    if (STEALTH_REGEX.test(trimmed)) {
+      return { isValid: true, type: "stealth" }
+    }
+
     // Inco uses standard Solana addresses
     const SOLANA_ADDRESS_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
-    if (SOLANA_ADDRESS_REGEX.test(address.trim())) {
+    if (SOLANA_ADDRESS_REGEX.test(trimmed)) {
       return { isValid: true, type: "regular" }
     }
 
     return { isValid: false, type: "invalid", error: "Invalid Solana address" }
+  }
+
+  /**
+   * Fallback to SIP Native shielded transfer when Inco SDK is not available
+   * This provides stealth address privacy but not FHE-encrypted amounts
+   */
+  private async sendWithSipNativeFallback(
+    params: PrivacySendParams,
+    signTransaction: (tx: Uint8Array) => Promise<Uint8Array | null>,
+    onStatusChange?: (status: PrivacySendStatus) => void
+  ): Promise<PrivacySendResult> {
+    try {
+      // Import SIP Native adapter dynamically
+      const { SipNativeAdapter } = await import("./sip-native")
+      const sipNative = new SipNativeAdapter(this.options)
+      await sipNative.initialize()
+
+      debug("Inco: Using SIP Native fallback for transfer")
+
+      // Delegate to SIP Native
+      const result = await sipNative.send(params, signTransaction, onStatusChange)
+
+      // Add note that this used fallback
+      if (result.success) {
+        return {
+          ...result,
+          providerData: {
+            ...result.providerData,
+            provider: "inco",
+            fallback: true,
+            note: "Used SIP Native fallback (Inco SDK unavailable in React Native)",
+          },
+        }
+      }
+
+      return result
+    } catch (err) {
+      onStatusChange?.("error")
+      return {
+        success: false,
+        error: `Fallback failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+      }
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -157,21 +209,16 @@ export class IncoAdapter implements PrivacyProviderAdapter {
 
   async send(
     params: PrivacySendParams,
-    _signTransaction: (tx: Uint8Array) => Promise<Uint8Array | null>,
+    signTransaction: (tx: Uint8Array) => Promise<Uint8Array | null>,
     onStatusChange?: (status: PrivacySendStatus) => void
   ): Promise<PrivacySendResult> {
     onStatusChange?.("validating")
 
-    // Check if SDK is ready
-    if (!this.encryption || !this.connection) {
-      onStatusChange?.("error")
-      return {
-        success: false,
-        error: "Inco SDK not initialized",
-        providerData: {
-          status: "sdk_not_ready",
-        },
-      }
+    // FALLBACK: If Inco SDK not available or missing methods, use SIP Native shielded transfer
+    // This provides stealth address privacy but not FHE-encrypted amounts
+    if (!this.encryption || !this.connection || typeof this.encryption.encryptValue !== "function") {
+      debug("Inco: SDK not available, falling back to SIP Native shielded transfer")
+      return this.sendWithSipNativeFallback(params, signTransaction, onStatusChange)
     }
 
     try {
