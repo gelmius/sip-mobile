@@ -417,7 +417,7 @@ scrcpy --record session.mp4                    # Record
 | Issue | File | Notes | Blocking |
 |-------|------|-------|----------|
 | Seed Vault disabled | `useSeedVault.ts:11,87` | RN codegen issue | #70, hardware wallet |
-| QR Scanner | `send.tsx:407` | Shows "Coming soon" | UX improvement |
+| ~~QR Scanner~~ | ~~`send.tsx:407`~~ | ✅ DONE (`53ff5f4`) | — |
 | Token prices | `swap.tsx:386` | USD shows 0 for tokens | Jupiter API needed |
 
 ### MEDIUM Priority
