@@ -2,13 +2,17 @@
  * Background Payment Scanning Service
  *
  * Scans for incoming stealth payments in the background using Expo Task Manager.
- * Sends push notifications when new payments are found.
+ * Sends local notifications when new payments are found.
  *
  * Features:
  * - Periodic background scanning (every 15 minutes when enabled)
- * - Local push notifications for new payments
+ * - Local notifications for new payments (no push/FCM required)
  * - Battery-efficient (respects system constraints)
  * - Persists scan state across app restarts
+ *
+ * NOTE: In development builds, you may see "Android Push notifications" warning.
+ * This is expected if Firebase/FCM is not configured. Local notifications
+ * (which we use) still work without FCM - push notifications are not required.
  *
  * @see https://docs.expo.dev/versions/latest/sdk/task-manager/
  * @see https://docs.expo.dev/versions/latest/sdk/background-fetch/
@@ -19,7 +23,7 @@ import * as BackgroundFetch from "expo-background-fetch"
 import * as Notifications from "expo-notifications"
 import * as SecureStore from "expo-secure-store"
 import AsyncStorage from "@react-native-async-storage/async-storage"
-import { Connection } from "@solana/web3.js"
+// Connection type used indirectly via getRpcClient
 import { fetchAllTransferRecords, type TransferRecordData } from "@/lib/anchor/client"
 import { bytesToHex } from "@/lib/stealth"
 import { decryptAmount, deriveSharedSecret } from "@/lib/anchor/crypto"
@@ -51,50 +55,89 @@ const MIN_INTERVAL = MIN_BACKGROUND_SCAN_INTERVAL_SEC
 // NOTIFICATION SETUP
 // ============================================================================
 
-// Configure notification handler
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-})
+/** Whether notifications are available */
+let notificationsAvailable = false
+let notificationsInitialized = false
+
+/**
+ * Initialize notifications (lazy, called on first use)
+ */
+async function initializeNotifications(): Promise<boolean> {
+  if (notificationsInitialized) return notificationsAvailable
+
+  notificationsInitialized = true
+
+  try {
+    // Configure notification handler
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    })
+    notificationsAvailable = true
+    return true
+  } catch (error) {
+    console.warn("[BackgroundScan] Notifications not available:", error)
+    notificationsAvailable = false
+    return false
+  }
+}
 
 /**
  * Request notification permissions
  */
 export async function requestNotificationPermissions(): Promise<boolean> {
-  const { status: existingStatus } = await Notifications.getPermissionsAsync()
+  try {
+    await initializeNotifications()
+    if (!notificationsAvailable) return false
 
-  if (existingStatus === "granted") {
-    return true
+    const { status: existingStatus } = await Notifications.getPermissionsAsync()
+
+    if (existingStatus === "granted") {
+      return true
+    }
+
+    const { status } = await Notifications.requestPermissionsAsync()
+    return status === "granted"
+  } catch (error) {
+    console.warn("[BackgroundScan] Failed to request permissions:", error)
+    return false
   }
-
-  const { status } = await Notifications.requestPermissionsAsync()
-  return status === "granted"
 }
 
 /**
  * Send a local notification for found payments
  */
 async function sendPaymentNotification(count: number, totalAmount: number): Promise<void> {
-  const amountStr = totalAmount.toFixed(4)
+  try {
+    await initializeNotifications()
+    if (!notificationsAvailable) {
+      console.log("[BackgroundScan] Notifications not available, skipping")
+      return
+    }
 
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: "New Payment Received!",
-      body:
-        count === 1
-          ? `You received ${amountStr} SOL`
-          : `You received ${count} payments (${amountStr} SOL total)`,
-      data: { type: "payment_received", count, amount: totalAmount },
-      sound: true,
-      badge: count,
-    },
-    trigger: null, // Immediate
-  })
+    const amountStr = totalAmount.toFixed(4)
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "New Payment Received!",
+        body:
+          count === 1
+            ? `You received ${amountStr} SOL`
+            : `You received ${count} payments (${amountStr} SOL total)`,
+        data: { type: "payment_received", count, amount: totalAmount },
+        sound: true,
+        badge: count,
+      },
+      trigger: null, // Immediate
+    })
+  } catch (error) {
+    console.warn("[BackgroundScan] Failed to send notification:", error)
+  }
 }
 
 // ============================================================================
