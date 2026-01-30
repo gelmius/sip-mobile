@@ -13,6 +13,8 @@ export type {
 // Seed Vault (PRIMARY - Seeker/Saga devices)
 export { useSeedVault } from "./useSeedVault"
 export type { SeedVaultWallet, UseSeedVaultReturn } from "./useSeedVault"
+// Re-export Seed Vault types from native lib
+export type { Seed as SeedVaultSeed, Account as SeedVaultAccount } from "@solana-mobile/seed-vault-lib"
 
 // External Wallet Integration (OPTIONAL)
 export { useMWA } from "./useMWA"

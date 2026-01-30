@@ -257,6 +257,8 @@ function walletTypeToProvider(walletType: WalletType): WalletProviderType {
   switch (walletType) {
     case "native":
       return "native"
+    case "seed-vault":
+      return "seed-vault"
     case "mwa":
       return "mwa"
     case "phantom":
@@ -314,6 +316,12 @@ export const WALLET_INFO: Record<
   native: {
     name: "Native Wallet",
     icon: "wallet",
+    chain: "solana",
+    connectionMethod: "native",
+  },
+  "seed-vault": {
+    name: "Seed Vault",
+    icon: "shield-check",
     chain: "solana",
     connectionMethod: "native",
   },

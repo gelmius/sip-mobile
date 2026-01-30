@@ -23,10 +23,12 @@ export type ChainType = "solana" | "ethereum" | "near"
  * Supported wallet types for mobile
  *
  * Note: Native wallet (useNativeWallet) is PRIMARY method.
+ * Seed Vault is the MOST SECURE option on Solana Mobile devices.
  * These types are for OPTIONAL external wallet connections.
  */
 export type WalletType =
   | "native" // Native wallet (PRIMARY)
+  | "seed-vault" // Seed Vault - TEE-backed (Saga/Seeker)
   | "phantom"
   | "solflare"
   | "backpack"
@@ -147,9 +149,10 @@ export type WalletConnectionStatus =
  * Wallet provider type for unified hook
  *
  * Note: "native" is the PRIMARY method via useNativeWallet.
+ * "seed-vault" provides TEE-backed security on Solana Mobile devices.
  * MWA/Phantom are OPTIONAL for external wallet connections.
  */
-export type WalletProviderType = "native" | "mwa" | "phantom"
+export type WalletProviderType = "native" | "seed-vault" | "mwa" | "phantom"
 
 /**
  * Connected wallet account info
