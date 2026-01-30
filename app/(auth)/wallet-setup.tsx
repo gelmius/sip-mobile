@@ -2,9 +2,11 @@
  * Wallet Setup Screen
  *
  * Entry point for native wallet setup:
- * - Create new wallet
- * - Import existing wallet
- * - (Optional) Connect external wallet
+ * - Create new wallet (generate seed phrase)
+ * - Import existing wallet (seed phrase or private key)
+ *
+ * SIP Privacy is a standalone wallet (like Phantom, Solflare).
+ * No external wallet connection needed.
  */
 
 import { View, Text, TouchableOpacity } from "react-native"
@@ -16,7 +18,6 @@ import type { Icon as PhosphorIcon } from "phosphor-react-native"
 import {
   Sparkle,
   DownloadSimple,
-  Link,
   LockKey,
 } from "phosphor-react-native"
 import { ICON_COLORS } from "@/constants/icons"
@@ -60,11 +61,6 @@ export default function WalletSetupScreen() {
 
   const handleOptionPress = (option: SetupOption) => {
     router.push(option.route)
-  }
-
-  const handleConnectExternal = () => {
-    // Navigate to external wallet connection (optional)
-    router.push("/(auth)/login")
   }
 
   return (
@@ -117,29 +113,6 @@ export default function WalletSetupScreen() {
             <Text className="text-dark-400 leading-5">{option.description}</Text>
           </TouchableOpacity>
         ))}
-
-        {/* Divider */}
-        <View className="flex-row items-center my-6">
-          <View className="flex-1 h-px bg-dark-800" />
-          <Text className="px-4 text-dark-600 text-sm">or</Text>
-          <View className="flex-1 h-px bg-dark-800" />
-        </View>
-
-        {/* External Wallet Option */}
-        <TouchableOpacity
-          onPress={handleConnectExternal}
-          className="p-4 rounded-xl border border-dark-800 bg-dark-900/50"
-          activeOpacity={0.7}
-        >
-          <View className="flex-row items-center justify-center">
-            <Link size={18} color={ICON_COLORS.inactive} weight="bold" />
-            <Text className="text-dark-400 ml-2">Connect External Wallet</Text>
-          </View>
-        </TouchableOpacity>
-
-        <Text className="text-dark-600 text-xs text-center mt-3">
-          Phantom, Solflare, or other Solana wallets
-        </Text>
       </View>
 
       {/* Security Notice */}
