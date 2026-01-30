@@ -1,5 +1,5 @@
-import { Tabs } from 'expo-router'
-import { View } from 'react-native'
+import { Tabs, Redirect } from 'expo-router'
+import { View, ActivityIndicator } from 'react-native'
 import {
   House,
   PaperPlaneTilt,
@@ -9,6 +9,8 @@ import {
 } from 'phosphor-react-native'
 import type { IconProps } from 'phosphor-react-native'
 import type { ComponentType } from 'react'
+import { useWalletStore } from '@/stores/wallet'
+import { useSettingsStore } from '@/stores/settings'
 
 type TabIconProps = {
   focused: boolean
@@ -28,6 +30,28 @@ function TabIcon({ focused, Icon }: TabIconProps) {
 }
 
 export default function TabsLayout() {
+  const { _hasHydrated: walletHydrated, accounts } = useWalletStore()
+  const { _hasHydrated: settingsHydrated, hasCompletedOnboarding } = useSettingsStore()
+
+  // Wait for BOTH stores to hydrate before checking gates
+  if (!walletHydrated || !settingsHydrated) {
+    return (
+      <View className="flex-1 bg-dark-950 items-center justify-center">
+        <ActivityIndicator size="large" color="#8b5cf6" />
+      </View>
+    )
+  }
+
+  // Gate 1: Must complete onboarding first
+  if (!hasCompletedOnboarding) {
+    return <Redirect href="/(auth)/onboarding" />
+  }
+
+  // Gate 2: Must have wallet
+  if (accounts.length === 0) {
+    return <Redirect href="/(auth)/wallet-setup" />
+  }
+
   return (
     <Tabs
       screenOptions={{

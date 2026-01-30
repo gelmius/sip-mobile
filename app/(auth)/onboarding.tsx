@@ -1,13 +1,16 @@
 /**
- * Onboarding Screen
+ * Onboarding Screen (Mandatory)
  *
- * First-time user experience with feature highlights:
- * 1. Private Payments - Hidden amounts and recipients
- * 2. Stealth Addresses - One-time addresses for privacy
- * 3. Viewing Keys - Selective disclosure for compliance
+ * Education-first onboarding for new users. Cannot be skipped.
+ * 5 slides covering SIP Privacy features:
+ * 1. Welcome to SIP Privacy
+ * 2. Private Payments
+ * 3. Stealth Addresses
+ * 4. Viewing Keys
+ * 5. Your Keys, Your Crypto
  */
 
-import { View, Text, Dimensions, TouchableOpacity } from "react-native"
+import { View, Text, Dimensions } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { router } from "expo-router"
 import { useState, useRef } from "react"
@@ -21,11 +24,13 @@ import Animated, {
 } from "react-native-reanimated"
 import type { Icon as PhosphorIcon } from "phosphor-react-native"
 import {
+  ShieldCheck,
   LockSimple,
   Ghost,
   Key,
+  Fingerprint,
 } from "phosphor-react-native"
-import { ICON_COLORS } from "@/constants/icons"
+import { useSettingsStore } from "@/stores/settings"
 
 const { width } = Dimensions.get("window")
 
@@ -40,27 +45,43 @@ interface OnboardingSlide {
 const SLIDES: OnboardingSlide[] = [
   {
     id: "1",
-    icon: LockSimple,
-    title: "Private Payments",
+    icon: ShieldCheck,
+    title: "Welcome to SIP Privacy",
     description:
-      "Send and receive SOL privately. Your amounts and recipients are hidden from the public blockchain.",
+      "The privacy standard for Solana. Your transactions, your business. No one else's.",
     color: "#8b5cf6", // brand-600
   },
   {
     id: "2",
-    icon: Ghost,
-    title: "Stealth Addresses",
+    icon: LockSimple,
+    title: "Private Payments",
     description:
-      "Generate one-time addresses for each transaction. No one can link your payments together.",
+      "Send and receive SOL privately. Amounts and recipients are hidden from the public blockchain.",
     color: "#06b6d4", // cyan
   },
   {
     id: "3",
+    icon: Ghost,
+    title: "Stealth Addresses",
+    description:
+      "Generate one-time addresses for each transaction. No one can link your payments together.",
+    color: "#f97316", // orange
+  },
+  {
+    id: "4",
     icon: Key,
     title: "Viewing Keys",
     description:
-      "Share selective disclosure keys with auditors when needed. Privacy with compliance.",
+      "Share selective access with auditors when needed. Privacy with compliance built-in.",
     color: "#10b981", // green
+  },
+  {
+    id: "5",
+    icon: Fingerprint,
+    title: "Your Keys, Your Crypto",
+    description:
+      "Keys stored locally with biometric protection. We never have access to your funds.",
+    color: "#ec4899", // pink
   },
 ]
 
@@ -68,6 +89,7 @@ export default function OnboardingScreen() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const scrollX = useSharedValue(0)
   const flatListRef = useRef<Animated.FlatList<OnboardingSlide>>(null)
+  const setOnboardingCompleted = useSettingsStore((s) => s.setOnboardingCompleted)
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -83,17 +105,13 @@ export default function OnboardingScreen() {
       })
       setCurrentIndex(currentIndex + 1)
     } else {
-      handleGetStarted()
+      handleComplete()
     }
   }
 
-  const handleGetStarted = () => {
-    // Mark onboarding as complete (could save to AsyncStorage)
-    router.replace("/(auth)/login")
-  }
-
-  const handleSkip = () => {
-    router.replace("/(auth)/login")
+  const handleComplete = () => {
+    setOnboardingCompleted()
+    router.replace("/(auth)/wallet-setup")
   }
 
   const renderSlide = ({ item }: { item: OnboardingSlide; index: number }) => {
@@ -157,17 +175,12 @@ export default function OnboardingScreen() {
     )
   }
 
+  const isLastSlide = currentIndex === SLIDES.length - 1
+
   return (
     <SafeAreaView className="flex-1 bg-dark-950">
-      {/* Skip Button */}
-      <View className="flex-row justify-end px-6 pt-4">
-        <TouchableOpacity onPress={handleSkip}>
-          <Text className="text-dark-400 text-lg">Skip</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Slides */}
-      <View className="flex-1 justify-center">
+      {/* Slides - Centered vertically */}
+      <View className="flex-1 justify-center items-center">
         <Animated.FlatList
           ref={flatListRef}
           data={SLIDES}
@@ -188,21 +201,21 @@ export default function OnboardingScreen() {
       {/* Pagination & Button */}
       <View className="px-6 pb-8">
         {/* Dots */}
-        <View className="flex-row justify-center mb-8">
+        <View className="flex-row justify-center mb-4">
           {SLIDES.map((_, index) => (
             <PaginationDot key={index} index={index} />
           ))}
         </View>
 
-        {/* Action Button */}
-        <Button fullWidth size="lg" onPress={handleNext}>
-          {currentIndex === SLIDES.length - 1 ? "Get Started" : "Next"}
-        </Button>
-
-        {/* Progress indicator */}
-        <Text className="text-dark-600 text-center mt-4">
+        {/* Slide count */}
+        <Text className="text-dark-500 text-sm font-medium text-center mb-6">
           {currentIndex + 1} of {SLIDES.length}
         </Text>
+
+        {/* Action Button */}
+        <Button fullWidth size="lg" onPress={handleNext}>
+          {isLastSlide ? "Get Started" : "Next"}
+        </Button>
       </View>
     </SafeAreaView>
   )

@@ -13,6 +13,14 @@ export const SLIPPAGE_PRESETS = [0.1, 0.5, 1.0, 3.0] as const
 export type { PrivacyProviderType } from "@/privacy-providers"
 
 interface SettingsStore {
+  // Hydration tracking (for gate logic)
+  _hasHydrated: boolean
+
+  // Onboarding (mandatory education)
+  hasCompletedOnboarding: boolean
+  setOnboardingCompleted: () => void
+  resetOnboarding: () => void
+
   // Swap settings
   slippage: number
   setSlippage: (slippage: number) => void
@@ -50,6 +58,14 @@ interface SettingsStore {
 export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set, get) => ({
+      // Hydration tracking
+      _hasHydrated: false,
+
+      // Onboarding (mandatory education)
+      hasCompletedOnboarding: false,
+      setOnboardingCompleted: () => set({ hasCompletedOnboarding: true }),
+      resetOnboarding: () => set({ hasCompletedOnboarding: false }),
+
       // Swap settings
       slippage: 1.0, // Default 1%
 
@@ -91,6 +107,21 @@ export const useSettingsStore = create<SettingsStore>()(
     {
       name: "sip-settings",
       storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        hasCompletedOnboarding: state.hasCompletedOnboarding,
+        slippage: state.slippage,
+        defaultPrivacyLevel: state.defaultPrivacyLevel,
+        privacyProvider: state.privacyProvider,
+        biometricsEnabled: state.biometricsEnabled,
+        network: state.network,
+        rpcProvider: state.rpcProvider,
+        heliusApiKey: state.heliusApiKey,
+        quicknodeApiKey: state.quicknodeApiKey,
+        tritonEndpoint: state.tritonEndpoint,
+      }),
+      onRehydrateStorage: () => () => {
+        useSettingsStore.setState({ _hasHydrated: true })
+      },
     }
   )
 )
