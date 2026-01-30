@@ -29,6 +29,7 @@ import {
 } from "@/data/tokens"
 import { useBalance } from "@/hooks"
 import { useWalletStore } from "@/stores/wallet"
+import { useCustomTokensStore } from "@/stores/customTokens"
 import type { TokenInfo } from "@/types"
 
 // ============================================================================
@@ -226,20 +227,28 @@ export default function TokenSelectorScreen() {
     }
   }
 
+  // Get custom tokens
+  const { tokens: customTokens } = useCustomTokensStore()
+
+  // Combine default and custom tokens
+  const allTokens = useMemo(() => {
+    return [...TOKEN_LIST, ...customTokens]
+  }, [customTokens])
+
   // Filter tokens based on search
   const filteredTokens = useMemo(() => {
     if (!searchQuery.trim()) {
-      return TOKEN_LIST
+      return allTokens
     }
 
     const query = searchQuery.toLowerCase().trim()
-    return TOKEN_LIST.filter(
+    return allTokens.filter(
       (token) =>
         token.symbol.toLowerCase().includes(query) ||
         token.name.toLowerCase().includes(query) ||
         token.mint.toLowerCase().includes(query)
     )
-  }, [searchQuery])
+  }, [searchQuery, allTokens])
 
   // Get tokens with balances (sorted by USD value)
   const tokensWithBalances = useMemo(() => {
@@ -449,10 +458,7 @@ export default function TokenSelectorScreen() {
       <View className="px-4 py-3 border-t border-dark-900">
         <TouchableOpacity
           className="flex-row items-center justify-center py-3 bg-dark-800 rounded-xl"
-          onPress={() => {
-            // TODO: Implement custom token import screen
-            // For now, just show a toast or do nothing
-          }}
+          onPress={() => router.push("/swap/import-token")}
         >
           <Text className="text-brand-400 font-medium">+ Import Custom Token</Text>
         </TouchableOpacity>
