@@ -9,6 +9,10 @@ import {
   markPerformance,
   logPerformanceSummary,
 } from "@/utils/performance"
+import {
+  isBackgroundScanEnabled,
+  registerBackgroundScan,
+} from "@/services/backgroundScan"
 
 // Keep splash screen visible while we initialize
 SplashScreen.preventAutoHideAsync()
@@ -24,6 +28,13 @@ export default function RootLayout() {
         // Minimal delay - let stores hydrate async
         await new Promise((resolve) => setTimeout(resolve, 50))
         markPerformance("prepare_done")
+
+        // Register background scan if previously enabled
+        const scanEnabled = await isBackgroundScanEnabled()
+        if (scanEnabled) {
+          await registerBackgroundScan()
+          markPerformance("background_scan_registered")
+        }
       } finally {
         setIsReady(true)
         markPerformance("is_ready")

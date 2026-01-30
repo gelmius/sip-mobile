@@ -242,6 +242,7 @@ export default function HomeScreen() {
   return (
     <SafeAreaView className="flex-1 bg-dark-950">
       <ScrollView
+        testID="home-scroll-view"
         className="flex-1 px-4"
         refreshControl={
           <RefreshControl
@@ -286,7 +287,7 @@ export default function HomeScreen() {
 
           {isConnected ? (
             <>
-              <Text className="text-4xl font-bold text-white mt-2">
+              <Text testID="wallet-balance" className="text-4xl font-bold text-white mt-2">
                 {balanceLoading ? "..." : balance.toFixed(4)} SOL
               </Text>
               <Text className="text-dark-500 mt-1">
@@ -308,6 +309,7 @@ export default function HomeScreen() {
               <Text className="text-4xl font-bold text-white mt-2">---.-- SOL</Text>
               <Text className="text-dark-500 mt-1">Connect wallet to view</Text>
               <TouchableOpacity
+                testID="setup-wallet-button"
                 className="mt-4 bg-brand-600 rounded-xl py-3 items-center"
                 onPress={() => router.push("/wallet-setup")}
               >

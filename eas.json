@@ -22,13 +22,32 @@
         "buildType": "apk"
       }
     },
-    "production-full": {
+    "production-aab": {
       "android": {
-        "buildType": "apk"
+        "buildType": "app-bundle"
+      }
+    },
+    "store": {
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "ios": {
+        "resourceClass": "m-medium"
       }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "./store/android/service-account.json",
+        "track": "internal"
+      },
+      "ios": {
+        "appleId": "rector@rectorspace.com",
+        "ascAppId": "TODO_APP_STORE_CONNECT_APP_ID",
+        "appleTeamId": "TODO_APPLE_TEAM_ID"
+      }
+    }
   }
 }

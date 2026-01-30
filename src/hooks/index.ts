@@ -81,3 +81,7 @@ export type {
 // Privacy Provider hooks (OpenRouter for Privacy)
 export { usePrivacyProvider, PRIVACY_PROVIDERS, getProviderInfo } from "./usePrivacyProvider"
 export type { UsePrivacyProviderReturn } from "./usePrivacyProvider"
+
+// Background Scan hooks
+export { useBackgroundScan } from "./useBackgroundScan"
+export type { UseBackgroundScanReturn } from "./useBackgroundScan"

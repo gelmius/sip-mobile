@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { View, Text, TouchableOpacity, ScrollView, Alert, Modal, TextInput, Linking, Pressable } from 'react-native'
+import { View, Text, TouchableOpacity, ScrollView, Alert, Modal, TextInput, Linking, Pressable, Switch } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import Constants from 'expo-constants'
 import { useWalletStore, formatAddress } from '@/stores/wallet'
 import { useViewingKeys } from '@/hooks/useViewingKeys'
+import { useBackgroundScan } from '@/hooks/useBackgroundScan'
 import { usePrivacyStore } from '@/stores/privacy'
 import { useSwapStore } from '@/stores/swap'
 import { useSettingsStore } from '@/stores/settings'
@@ -96,6 +97,36 @@ function SettingsItem({ icon, title, subtitle, onPress }: SettingsItemProps) {
       </View>
       <Text className="text-dark-500">›</Text>
     </TouchableOpacity>
+  )
+}
+
+type SettingsToggleProps = {
+  icon: string
+  title: string
+  subtitle?: string
+  value: boolean
+  onValueChange: (value: boolean) => void
+  disabled?: boolean
+}
+
+function SettingsToggle({ icon, title, subtitle, value, onValueChange, disabled, testID }: SettingsToggleProps & { testID?: string }) {
+  return (
+    <View testID={testID} className="flex-row items-center p-4 bg-dark-900 border-b border-dark-800">
+      <Text className="text-2xl mr-4">{icon}</Text>
+      <View className="flex-1">
+        <Text className="text-white font-medium">{title}</Text>
+        {subtitle && (
+          <Text className="text-dark-500 text-sm">{subtitle}</Text>
+        )}
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onValueChange}
+        disabled={disabled}
+        trackColor={{ false: '#3f3f46', true: '#8b5cf6' }}
+        thumbColor={value ? '#fff' : '#71717a'}
+      />
+    </View>
   )
 }
 
@@ -218,6 +249,32 @@ export default function SettingsScreen() {
 
   const activeDisclosures = getActiveDisclosures()
 
+  // Background scanning
+  const {
+    isEnabled: backgroundScanEnabled,
+    isLoading: backgroundScanLoading,
+    statusText: backgroundScanStatus,
+    setEnabled: setBackgroundScanEnabled,
+    error: backgroundScanError,
+  } = useBackgroundScan()
+
+  const handleBackgroundScanToggle = async (value: boolean) => {
+    await setBackgroundScanEnabled(value)
+    if (backgroundScanError) {
+      addToast({
+        type: 'error',
+        title: 'Error',
+        message: backgroundScanError,
+      })
+    } else {
+      addToast({
+        type: 'success',
+        title: value ? 'Background Scanning Enabled' : 'Background Scanning Disabled',
+        message: value ? 'You will be notified of new payments' : 'Notifications disabled',
+      })
+    }
+  }
+
   const handleClearPaymentHistory = () => {
     Alert.alert(
       'Clear Payment History',
@@ -267,7 +324,7 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-dark-950">
-      <ScrollView className="flex-1">
+      <ScrollView testID="settings-scroll-view" className="flex-1">
         <View className="px-4 pt-6 pb-4">
           <Text className="text-3xl font-bold text-white">Settings</Text>
         </View>
@@ -328,6 +385,15 @@ export default function SettingsScreen() {
               title="Compliance Dashboard"
               subtitle="For institutions"
               onPress={() => router.push('/settings/compliance')}
+            />
+            <SettingsToggle
+              testID="background-scan-toggle"
+              icon="🔔"
+              title="Background Scanning"
+              subtitle={backgroundScanEnabled ? `Active (${backgroundScanStatus})` : 'Notify when payments arrive'}
+              value={backgroundScanEnabled}
+              onValueChange={handleBackgroundScanToggle}
+              disabled={backgroundScanLoading}
             />
           </View>
         </View>

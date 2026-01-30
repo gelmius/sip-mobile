@@ -60,7 +60,7 @@ export default function WalletSetupScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-dark-950">
+    <SafeAreaView testID="welcome-screen" className="flex-1 bg-dark-950">
       {/* Header */}
       <View className="px-6 pt-8 pb-4">
         <Text className="text-3xl font-bold text-white mb-2">
@@ -76,6 +76,7 @@ export default function WalletSetupScreen() {
         {SETUP_OPTIONS.map((option) => (
           <TouchableOpacity
             key={option.id}
+            testID={option.id === "create" ? "create-wallet-button" : "import-wallet-button"}
             onPress={() => handleOptionPress(option)}
             className={`mb-4 p-5 rounded-2xl border ${
               option.primary

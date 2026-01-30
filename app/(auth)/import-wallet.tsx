@@ -146,6 +146,7 @@ export default function ImportWalletScreen() {
                 </Text>
                 <View className="bg-dark-900 rounded-xl border border-dark-800 p-4">
                   <TextInput
+                    testID="seed-phrase-input"
                     value={seedPhrase}
                     onChangeText={(text) => {
                       setSeedPhrase(text)

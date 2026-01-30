@@ -170,7 +170,7 @@ export default function CreateWalletScreen() {
 
           {/* Mnemonic Grid */}
           <View className="px-6 mt-6">
-            <View className="bg-dark-900 rounded-2xl p-4 border border-dark-800">
+            <View testID="seed-phrase-display" className="bg-dark-900 rounded-2xl p-4 border border-dark-800">
               <View className="flex-row flex-wrap">
                 {mnemonic.map((word, index) => (
                   <View

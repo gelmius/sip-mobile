@@ -1,0 +1,19 @@
+{
+  "app_name": "SIP Privacy",
+  "tagline": "The Privacy Standard for Web3",
+  "description": "SIP Privacy is a privacy-first Solana wallet that shields your transactions using stealth addresses and Pedersen commitments.\n\nKEY FEATURES:\n• Shielded Payments - Send SOL privately with hidden sender, amount, and recipient\n• Stealth Addresses - One-time addresses prevent transaction linking\n• Viewing Keys - Share read-only access for compliance\n• Jupiter DEX - Swap tokens with optional privacy\n• Background Scanning - Get notified of new payments\n• Multiple Privacy Providers - SIP Native, Arcium, Privacy Cash, and more\n\nPRIVACY BY DEFAULT:\n• Pedersen Commitments hide transaction amounts\n• Stealth addresses prevent tracking\n• Viewing keys enable selective disclosure\n\nCOMPLIANCE READY:\n• Export viewing keys for auditors\n• Track disclosures with expiration\n• Generate compliance reports\n• Privacy score dashboard\n\nSECURITY:\n• Native key management\n• Seed Vault support (Seeker/Saga)\n• Biometric authentication\n• No third-party custody",
+  "category": "DeFi",
+  "tags": ["privacy", "wallet", "defi", "stealth", "compliance"],
+  "website": "https://sip-protocol.org",
+  "documentation": "https://docs.sip-protocol.org",
+  "github": "https://github.com/sip-protocol/sip-mobile",
+  "twitter": "https://twitter.com/saborimeter",
+  "discord": null,
+  "solana_program_ids": [
+    "S1PMFspo4W6BYKHWkHNF7kZ3fnqibEXg3LQjxepS9at"
+  ],
+  "android_package": "org.sip_protocol.privacy",
+  "seed_vault_support": true,
+  "release_notes": "Initial release with shielded payments, Jupiter DEX integration, and viewing key management.",
+  "screenshots": []
+}

@@ -1,0 +1,21 @@
+{
+  "app_name": "SIP Privacy",
+  "subtitle": "Private Solana Wallet",
+  "promotional_text": "The privacy standard for Web3. Send and receive SOL privately with stealth addresses.",
+  "description": "SIP Privacy is a privacy-first Solana wallet that shields your transactions using stealth addresses and Pedersen commitments.\n\nKEY FEATURES\n\n• Shielded Payments - Send SOL privately with hidden sender, amount, and recipient\n• Stealth Addresses - One-time addresses prevent transaction linking\n• Viewing Keys - Share read-only access for compliance without exposing spending ability\n• Jupiter DEX - Swap tokens with optional privacy protection\n• Background Scanning - Get notified when you receive payments\n• Multiple Privacy Providers - Choose SIP Native, Arcium, Privacy Cash, and more\n\nPRIVACY BY DEFAULT\n\nUnlike traditional wallets where all transactions are public, SIP Privacy uses cryptographic techniques to protect your financial privacy:\n\n• Pedersen Commitments hide transaction amounts\n• Stealth addresses prevent address reuse tracking\n• Viewing keys enable selective disclosure for audits\n\nCOMPLIANCE READY\n\nSIP Privacy is designed for both individual privacy and institutional compliance:\n\n• Export viewing keys for auditors\n• Track disclosures with expiration dates\n• Generate compliance reports\n• Privacy score dashboard\n\nBUILT ON SOLANA\n\n• Fast transactions (400ms finality)\n• Low fees (< $0.001 per transaction)\n• Decentralized - your keys, your crypto\n• Open source on GitHub\n\nSECURITY\n\n• Native key management with SecureStore\n• Biometric authentication (Face ID / Touch ID)\n• Optional PIN backup\n• No third-party key custody\n\nNote: This app requires a Solana wallet. You can create a new wallet or import an existing seed phrase.",
+  "keywords": "solana,privacy,wallet,crypto,stealth,shielded,defi,swap,jupiter,web3",
+  "support_url": "https://docs.sip-protocol.org",
+  "marketing_url": "https://sip-protocol.org",
+  "privacy_policy_url": "https://sip-protocol.org/privacy",
+  "category": "Finance",
+  "secondary_category": "Utilities",
+  "age_rating": "4+",
+  "copyright": "2026 SIP Protocol",
+  "release_notes": "Initial release with shielded payments, Jupiter DEX integration, and viewing key management.",
+  "screenshots": {
+    "iphone_6_7": [],
+    "iphone_6_5": [],
+    "iphone_5_5": [],
+    "ipad_12_9": []
+  }
+}

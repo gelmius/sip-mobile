@@ -169,8 +169,8 @@ export default function ReceiveScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-dark-950">
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+    <SafeAreaView testID="receive-screen" className="flex-1 bg-dark-950">
+      <ScrollView testID="receive-scroll-view" className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="px-6 pt-6">
           {/* Header */}
           <Text className="text-3xl font-bold text-white">Receive</Text>
@@ -234,7 +234,7 @@ export default function ReceiveScreen() {
           )}
 
           {/* QR Code */}
-          <View className="mt-6 items-center">
+          <View testID="qr-code-container" className="mt-6 items-center">
             <View className="bg-white rounded-2xl p-6">
               {stealthAddress ? (
                 <QRCode
@@ -293,6 +293,7 @@ export default function ReceiveScreen() {
           {/* Action Buttons */}
           <View className="flex-row gap-3 mt-6">
             <TouchableOpacity
+              testID="copy-address-button"
               className={`flex-1 py-4 rounded-xl items-center ${
                 copied ? "bg-green-600" : "bg-dark-800"
               }`}
@@ -304,6 +305,7 @@ export default function ReceiveScreen() {
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
+              testID="share-address-button"
               className="flex-1 bg-brand-600 py-4 rounded-xl items-center"
               onPress={handleShare}
               disabled={!stealthAddress}

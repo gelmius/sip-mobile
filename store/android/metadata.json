@@ -1,0 +1,18 @@
+{
+  "app_name": "SIP Privacy",
+  "short_description": "Private Solana wallet with stealth addresses and shielded payments",
+  "full_description": "SIP Privacy is a privacy-first Solana wallet that shields your transactions using stealth addresses and Pedersen commitments.\n\n<b>KEY FEATURES</b>\n\n★ Shielded Payments - Send SOL privately with hidden sender, amount, and recipient\n★ Stealth Addresses - One-time addresses prevent transaction linking\n★ Viewing Keys - Share read-only access for compliance without exposing spending ability\n★ Jupiter DEX - Swap tokens with optional privacy protection\n★ Background Scanning - Get notified when you receive payments\n★ Multiple Privacy Providers - Choose SIP Native, Arcium, Privacy Cash, and more\n\n<b>PRIVACY BY DEFAULT</b>\n\nUnlike traditional wallets where all transactions are public, SIP Privacy uses cryptographic techniques to protect your financial privacy:\n\n• Pedersen Commitments hide transaction amounts\n• Stealth addresses prevent address reuse tracking\n• Viewing keys enable selective disclosure for audits\n\n<b>COMPLIANCE READY</b>\n\nSIP Privacy is designed for both individual privacy and institutional compliance:\n\n• Export viewing keys for auditors\n• Track disclosures with expiration dates\n• Generate compliance reports\n• Privacy score dashboard\n\n<b>BUILT ON SOLANA</b>\n\n• Fast transactions (400ms finality)\n• Low fees (< $0.001 per transaction)\n• Decentralized - your keys, your crypto\n• Open source on GitHub\n\n<b>SECURITY</b>\n\n• Native key management with Android Keystore\n• Biometric authentication (Fingerprint / Face Unlock)\n• Optional PIN backup\n• No third-party key custody\n• Seed Vault support for Solana Mobile devices\n\nNote: This app requires a Solana wallet. You can create a new wallet or import an existing seed phrase.\n\nPrivacy Policy: https://sip-protocol.org/privacy\nSupport: https://docs.sip-protocol.org",
+  "category": "FINANCE",
+  "content_rating": "Everyone",
+  "developer_name": "SIP Protocol",
+  "developer_email": "rector@rectorspace.com",
+  "website": "https://sip-protocol.org",
+  "privacy_policy_url": "https://sip-protocol.org/privacy",
+  "release_notes": "Initial release with shielded payments, Jupiter DEX integration, and viewing key management.",
+  "screenshots": {
+    "phone": [],
+    "tablet_7": [],
+    "tablet_10": []
+  },
+  "feature_graphic": null
+}

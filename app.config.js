@@ -26,7 +26,9 @@ export default {
       supportsTablet: true,
       bundleIdentifier: "org.sip-protocol.privacy",
       infoPlist: {
-        UIBackgroundModes: ["fetch"],
+        UIBackgroundModes: ["fetch", "remote-notification"],
+        NSCameraUsageDescription: "SIP Privacy uses the camera to scan QR codes for receiving payments.",
+        NSFaceIDUsageDescription: "Allow SIP Privacy to use Face ID for secure authentication.",
       },
     },
     android: {
@@ -41,6 +43,9 @@ export default {
       permissions: [
         "android.permission.USE_BIOMETRIC",
         "android.permission.USE_FINGERPRINT",
+        "android.permission.CAMERA",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
       ],
     },
     web: {
@@ -61,6 +66,20 @@ export default {
       ["expo-apple-authentication"],
       "expo-web-browser",
       "expo-font",
+      [
+        "expo-camera",
+        {
+          cameraPermission: "SIP Privacy uses the camera to scan QR codes for receiving payments.",
+        },
+      ],
+      [
+        "expo-notifications",
+        {
+          icon: "./assets/notification-icon.png",
+          color: "#8b5cf6",
+          sounds: [],
+        },
+      ],
       [
         "expo-build-properties",
         {

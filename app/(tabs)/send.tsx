@@ -352,7 +352,7 @@ export default function SendScreen() {
             <View className="mt-6">
               <View className="flex-row items-center justify-between mb-2">
                 <Text className="text-dark-400 text-sm">Amount</Text>
-                <TouchableOpacity onPress={handleMaxAmount}>
+                <TouchableOpacity testID="max-button" onPress={handleMaxAmount}>
                   <Text className="text-brand-400 text-sm">MAX</Text>
                 </TouchableOpacity>
               </View>
@@ -363,6 +363,7 @@ export default function SendScreen() {
               >
                 <View className="flex-row items-center">
                   <TextInput
+                    testID="amount-input"
                     className="flex-1 text-3xl font-bold text-white"
                     placeholder="0.00"
                     placeholderTextColor="#71717a"
@@ -384,7 +385,7 @@ export default function SendScreen() {
               <View className="flex-row items-center justify-between mb-2">
                 <Text className="text-dark-400 text-sm">Recipient</Text>
                 {isStealth && (
-                  <View className="bg-brand-600/20 px-2 py-0.5 rounded">
+                  <View testID="stealth-address-badge" className="bg-brand-600/20 px-2 py-0.5 rounded">
                     <Text className="text-brand-400 text-xs">Stealth Address</Text>
                   </View>
                 )}
@@ -395,6 +396,7 @@ export default function SendScreen() {
                 }`}
               >
                 <TextInput
+                  testID="recipient-input"
                   className="text-white"
                   placeholder="Wallet address or sip: stealth address"
                   placeholderTextColor="#71717a"
@@ -413,6 +415,7 @@ export default function SendScreen() {
               {/* Quick Actions */}
               <View className="flex-row gap-2 mt-3">
                 <TouchableOpacity
+                  testID="scan-qr-button"
                   className="flex-row items-center bg-dark-800 rounded-lg px-3 py-2"
                   onPress={() => router.push("/send/scanner")}
                 >
@@ -447,6 +450,7 @@ export default function SendScreen() {
 
             {/* Privacy Level Display (read-only, configured in Settings) */}
             <TouchableOpacity
+              testID="privacy-toggle"
               className="mt-6"
               onPress={() => router.push("/(tabs)/settings")}
               activeOpacity={0.7}
@@ -513,6 +517,7 @@ export default function SendScreen() {
         {/* Send Button */}
         <View className="px-6 pb-6 pt-2 border-t border-dark-900">
           <Button
+            testID="send-button"
             fullWidth
             size="lg"
             onPress={handleReview}
@@ -581,7 +586,7 @@ export default function SendScreen() {
 
           {/* Status Display */}
           {status !== "idle" && status !== "error" && status !== "confirmed" && (
-            <View className="flex-row items-center justify-center gap-2 py-2">
+            <View testID="transaction-progress" className="flex-row items-center justify-center gap-2 py-2">
               <ActivityIndicator size="small" color="#8b5cf6" />
               <Text className="text-dark-400">
                 {status === "validating" && "Validating..."}
@@ -613,6 +618,7 @@ export default function SendScreen() {
               Cancel
             </Button>
             <Button
+              testID="confirm-send-button"
               onPress={handleConfirmSend}
               disabled={status !== "idle" && status !== "error"}
               loading={status !== "idle" && status !== "error"}
@@ -631,7 +637,7 @@ export default function SendScreen() {
         title="Transfer Complete"
       >
         <View className="gap-4">
-          <View className="items-center py-6">
+          <View testID="transaction-success" className="items-center py-6">
             <View className="w-20 h-20 bg-green-600/20 rounded-full items-center justify-center mb-4">
               <Text className="text-4xl">✅</Text>
             </View>

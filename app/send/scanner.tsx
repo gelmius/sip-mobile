@@ -149,7 +149,7 @@ export default function ScannerScreen() {
   }
 
   return (
-    <View className="flex-1 bg-black">
+    <View testID="qr-scanner-screen" className="flex-1 bg-black">
       {/* Camera View */}
       <CameraView
         style={StyleSheet.absoluteFillObject}
