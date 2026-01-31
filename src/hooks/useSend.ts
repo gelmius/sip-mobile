@@ -392,6 +392,7 @@ export function useSend(): UseSendReturn {
           txHash: txHash,
           timestamp: Date.now(),
           privacyLevel: params.privacyLevel,
+          network,
         })
 
         return { success: true, txHash: txHash }

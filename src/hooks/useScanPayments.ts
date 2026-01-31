@@ -482,6 +482,7 @@ export function useScanPayments(): UseScanPaymentsReturn {
                 privacyLevel: "shielded",
                 claimed: false,
                 keyId: activeKeyId ?? undefined, // Link to active key set for claiming
+                network, // Track which network this payment was made on
               }
 
               result.newPayments.push(payment)

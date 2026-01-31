@@ -83,6 +83,8 @@ export interface PaymentRecord {
   claimedAt?: number
   /** Links to StealthKeysRecord.id - required for claiming archived keys */
   keyId?: string
+  /** Network where this payment was made (for filtering) */
+  network?: "mainnet-beta" | "devnet" | "testnet"
 }
 
 // ============================================================================

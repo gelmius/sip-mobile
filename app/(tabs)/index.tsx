@@ -30,6 +30,9 @@ import {
   Coins,
   ArrowDown,
   ArrowUp,
+  ListChecks,
+  ShieldStar,
+  Clock,
 } from "phosphor-react-native"
 import type { IconProps } from "phosphor-react-native"
 import type { ComponentType } from "react"
@@ -207,17 +210,23 @@ export default function HomeScreen() {
     markPerformance("home_first_render")
   }, [])
 
-  // Memoize expensive computations
-  const recentPayments = useMemo(() => payments.slice(0, 5), [payments])
+  // Filter payments by current network (legacy payments without network field are treated as devnet)
+  const networkPayments = useMemo(() =>
+    payments.filter((p) => (p.network || "devnet") === network),
+    [payments, network]
+  )
+
+  // Memoize expensive computations (now using network-filtered payments)
+  const recentPayments = useMemo(() => networkPayments.slice(0, 5), [networkPayments])
   const claimable = useMemo(() => getClaimableAmount(), [payments])
   const { count: unclaimedCount, amount: unclaimedAmount } = claimable
 
-  // Memoize privacy stats
+  // Memoize privacy stats (now using network-filtered payments)
   const privacyStats = useMemo(() => ({
-    total: payments.length,
-    private: payments.filter((p) => p.privacyLevel !== "transparent").length,
-    pending: payments.filter((p) => p.status === "pending").length,
-  }), [payments])
+    total: networkPayments.length,
+    private: networkPayments.filter((p) => p.privacyLevel !== "transparent").length,
+    pending: networkPayments.filter((p) => p.status === "pending").length,
+  }), [networkPayments])
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -374,19 +383,28 @@ export default function HomeScreen() {
         {isConnected && privacyStats.total > 0 && (
           <View className="flex-row mt-6 gap-3">
             <View className="flex-1 bg-dark-900 rounded-xl p-4 border border-dark-800">
-              <Text className="text-dark-500 text-sm">Total Transactions</Text>
+              <View className="flex-row items-center gap-1.5">
+                <ListChecks size={14} weight="bold" color="#a1a1aa" />
+                <Text className="text-dark-500 text-sm">Transfers</Text>
+              </View>
               <Text className="text-2xl font-bold text-white mt-1">
                 {privacyStats.total}
               </Text>
             </View>
             <View className="flex-1 bg-dark-900 rounded-xl p-4 border border-dark-800">
-              <Text className="text-dark-500 text-sm">Private</Text>
+              <View className="flex-row items-center gap-1.5">
+                <ShieldStar size={14} weight="bold" color="#a78bfa" />
+                <Text className="text-dark-500 text-sm">Private</Text>
+              </View>
               <Text className="text-2xl font-bold text-brand-400 mt-1">
                 {privacyStats.private}
               </Text>
             </View>
             <View className="flex-1 bg-dark-900 rounded-xl p-4 border border-dark-800">
-              <Text className="text-dark-500 text-sm">Pending</Text>
+              <View className="flex-row items-center gap-1.5">
+                <Clock size={14} weight="bold" color="#facc15" />
+                <Text className="text-dark-500 text-sm">Pending</Text>
+              </View>
               <Text className="text-2xl font-bold text-yellow-400 mt-1">
                 {privacyStats.pending}
               </Text>

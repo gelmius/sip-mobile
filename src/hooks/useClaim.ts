@@ -477,9 +477,11 @@ export function useClaim(): UseClaimReturn {
       (p) =>
         p.type === "receive" &&
         p.status === "completed" &&
-        !p.claimed
+        !p.claimed &&
+        // Filter by current network (legacy payments without network are treated as devnet)
+        (p.network || "devnet") === network
     )
-  }, [payments])
+  }, [payments, network])
 
   const getClaimableAmount = useCallback((): { amount: number; count: number } => {
     const unclaimed = getUnclaimedPayments()

@@ -21,6 +21,7 @@ import { router } from "expo-router"
 import { useState, useMemo, useCallback } from "react"
 import { usePrivacyStore } from "@/stores/privacy"
 import { useWalletStore } from "@/stores/wallet"
+import { useSettingsStore } from "@/stores/settings"
 import type { PaymentRecord, PrivacyLevel } from "@/types"
 import {
   ArrowLeft,
@@ -194,15 +195,22 @@ function FilterChip({ label, isActive, onPress }: FilterChipProps) {
 export default function HistoryScreen() {
   const { payments, isScanning } = usePrivacyStore()
   const { isConnected } = useWalletStore()
+  const { network } = useSettingsStore()
 
   const [filterType, setFilterType] = useState<FilterType>("all")
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [refreshing, setRefreshing] = useState(false)
 
+  // Filter payments by current network (legacy payments without network field are treated as devnet)
+  const networkPayments = useMemo(() =>
+    payments.filter((p) => (p.network || "devnet") === network),
+    [payments, network]
+  )
+
   // Filter payments
   const filteredPayments = useMemo(() => {
-    let result = [...payments]
+    let result = [...networkPayments]
 
     // Filter by type
     if (filterType !== "all") {
@@ -229,7 +237,7 @@ export default function HistoryScreen() {
     result.sort((a, b) => b.timestamp - a.timestamp)
 
     return result
-  }, [payments, filterType, filterStatus, searchQuery])
+  }, [networkPayments, filterType, filterStatus, searchQuery])
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
