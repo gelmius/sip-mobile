@@ -163,6 +163,7 @@ export class SipNativeAdapter implements PrivacyProviderAdapter {
         await import("@solana/web3.js")
 
       const rpcEndpoint = this.options.rpcEndpoint || getRpcEndpoint(this.options.network)
+      debug(`SIP Native using RPC: ${rpcEndpoint.split("?")[0]}...`) // Log endpoint (hide API key)
       const connection = new Connection(rpcEndpoint, { commitment: "confirmed" })
       const fromPubkey = new PublicKey(this.options.walletAddress)
 
@@ -284,10 +285,13 @@ export class SipNativeAdapter implements PrivacyProviderAdapter {
         txHash,
       }
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Transaction failed"
+      console.error("[SIP Native] Send failed:", errorMessage)
+      debug(`SIP Native send error: ${errorMessage}`)
       setStatus("error")
       return {
         success: false,
-        error: err instanceof Error ? err.message : "Transaction failed",
+        error: errorMessage,
       }
     }
   }

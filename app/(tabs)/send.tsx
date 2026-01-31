@@ -229,6 +229,7 @@ export default function SendScreen() {
   }, [recipient, amount, balance, providerReady, providerError, addToast])
 
   const handleConfirmSend = useCallback(async () => {
+    console.log("[Send] Starting transaction...")
     // Reset state
     setStatus("idle")
     setTxError(null)
@@ -244,10 +245,12 @@ export default function SendScreen() {
       (newStatus) => setStatus(newStatus)
     )
 
+    console.log("[Send] Result:", result.success ? "success" : "failed", result.error || result.txHash)
     if (result.success && result.txHash) {
       setTxHash(result.txHash)
       setStatus("confirmed")
     } else {
+      console.error("[Send] Transaction failed:", result.error)
       setTxError(result.error || "Transaction failed")
       setStatus("error")
       addToast({

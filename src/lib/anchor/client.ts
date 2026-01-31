@@ -151,10 +151,14 @@ export class SipPrivacyClient {
     ephemeralPubkey: Uint8Array
   }> {
     // Fetch current config to get totalTransfers
+    debug(`Fetching SIP Privacy config from ${this.programId.toBase58()}`)
     const config = await this.fetchConfig()
     if (!config) {
-      throw new Error("Program not initialized - config account not found")
+      const [configPda] = getConfigPda(this.programId)
+      console.error(`[SIP Privacy] Config not found at PDA: ${configPda.toBase58()}`)
+      throw new Error(`Program not initialized - config account ${configPda.toBase58()} not found`)
     }
+    debug(`SIP Privacy config found: feeBps=${config.feeBps}, totalTransfers=${config.totalTransfers}`)
 
     if (config.paused) {
       throw new Error("Program is paused")

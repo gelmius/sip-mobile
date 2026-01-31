@@ -34,7 +34,70 @@ import {
   PRIVACY_PROVIDERS,
   getProviderInfo,
 } from "@/privacy-providers"
+import { getRpcApiKey } from "@/lib/config"
 import { debug } from "@/utils/logger"
+
+// ============================================================================
+// RPC ENDPOINT HELPER
+// ============================================================================
+
+const HELIUS_ENDPOINTS: Record<string, string> = {
+  "mainnet-beta": "https://mainnet.helius-rpc.com",
+  devnet: "https://devnet.helius-rpc.com",
+  testnet: "https://api.testnet.solana.com",
+}
+
+const QUICKNODE_ENDPOINTS: Record<string, string> = {
+  "mainnet-beta": "https://solana-mainnet.quiknode.pro",
+  devnet: "https://solana-devnet.quiknode.pro",
+  testnet: "https://api.testnet.solana.com",
+}
+
+const PUBLICNODE_ENDPOINTS: Record<string, string> = {
+  "mainnet-beta": "https://solana-rpc.publicnode.com",
+  devnet: "https://api.devnet.solana.com",
+  testnet: "https://api.testnet.solana.com",
+}
+
+/**
+ * Build RPC endpoint URL from settings
+ */
+function buildRpcEndpoint(
+  provider: string,
+  network: string,
+  heliusApiKey: string | null,
+  quicknodeApiKey: string | null,
+  tritonEndpoint: string | null
+): string {
+  switch (provider) {
+    case "helius": {
+      const apiKey = heliusApiKey || getRpcApiKey("helius")
+      if (!apiKey) {
+        console.warn("Helius requires API key, falling back to PublicNode")
+        return PUBLICNODE_ENDPOINTS[network] || PUBLICNODE_ENDPOINTS.devnet
+      }
+      const baseUrl = HELIUS_ENDPOINTS[network] || HELIUS_ENDPOINTS.devnet
+      return `${baseUrl}/?api-key=${apiKey}`
+    }
+    case "quicknode": {
+      if (!quicknodeApiKey) {
+        console.warn("QuickNode requires API key, falling back to PublicNode")
+        return PUBLICNODE_ENDPOINTS[network] || PUBLICNODE_ENDPOINTS.devnet
+      }
+      const baseUrl = QUICKNODE_ENDPOINTS[network] || QUICKNODE_ENDPOINTS.devnet
+      return `${baseUrl}/${quicknodeApiKey}`
+    }
+    case "triton":
+      if (!tritonEndpoint) {
+        console.warn("Triton requires custom endpoint, falling back to PublicNode")
+        return PUBLICNODE_ENDPOINTS[network] || PUBLICNODE_ENDPOINTS.devnet
+      }
+      return tritonEndpoint
+    case "publicnode":
+    default:
+      return PUBLICNODE_ENDPOINTS[network] || PUBLICNODE_ENDPOINTS.devnet
+  }
+}
 
 // ============================================================================
 // TYPES
@@ -75,7 +138,14 @@ export interface UsePrivacyProviderReturn {
 // ============================================================================
 
 export function usePrivacyProvider(): UsePrivacyProviderReturn {
-  const { privacyProvider, network } = useSettingsStore()
+  const {
+    privacyProvider,
+    network,
+    rpcProvider,
+    heliusApiKey,
+    quicknodeApiKey,
+    tritonEndpoint,
+  } = useSettingsStore()
   const { address: walletAddress, isConnected } = useWalletStore()
   const { signTransaction } = useNativeWallet()
 
@@ -86,6 +156,12 @@ export function usePrivacyProvider(): UsePrivacyProviderReturn {
 
   // Provider info for UI
   const providerInfo = useMemo(() => getProviderInfo(privacyProvider), [privacyProvider])
+
+  // Build RPC endpoint from settings
+  const rpcEndpoint = useMemo(
+    () => buildRpcEndpoint(rpcProvider, network, heliusApiKey, quicknodeApiKey, tritonEndpoint),
+    [rpcProvider, network, heliusApiKey, quicknodeApiKey, tritonEndpoint]
+  )
 
   // Initialize adapter when provider/network/wallet changes
   useEffect(() => {
@@ -98,6 +174,7 @@ export function usePrivacyProvider(): UsePrivacyProviderReturn {
     const options: AdapterOptions = {
       network,
       walletAddress,
+      rpcEndpoint,
     }
 
     setIsInitializing(true)
@@ -117,7 +194,7 @@ export function usePrivacyProvider(): UsePrivacyProviderReturn {
       .finally(() => {
         setIsInitializing(false)
       })
-  }, [privacyProvider, network, walletAddress])
+  }, [privacyProvider, network, walletAddress, rpcEndpoint])
 
   // Wrapped sign transaction for adapters
   const wrappedSignTransaction = useCallback(
