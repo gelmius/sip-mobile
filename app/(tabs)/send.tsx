@@ -234,28 +234,41 @@ export default function SendScreen() {
     setTxError(null)
     setTxHash(null)
 
-    // Execute send via Privacy Provider
-    const result = await send(
-      {
-        amount,
-        recipient,
-        privacyLevel: defaultPrivacyLevel,
-      },
-      (newStatus) => setStatus(newStatus)
-    )
+    try {
+      // Execute send via Privacy Provider
+      const result = await send(
+        {
+          amount,
+          recipient,
+          privacyLevel: defaultPrivacyLevel,
+        },
+        (newStatus) => setStatus(newStatus)
+      )
 
-    console.log("[Send] Result:", result.success ? "success" : "failed", result.error || result.txHash)
-    if (result.success && result.txHash) {
-      setTxHash(result.txHash)
-      setStatus("confirmed")
-    } else {
-      console.error("[Send] Transaction failed:", result.error)
-      setTxError(result.error || "Transaction failed")
+      console.log("[Send] Result:", result.success ? "success" : "failed", result.error || result.txHash)
+      if (result.success && result.txHash) {
+        setTxHash(result.txHash)
+        setStatus("confirmed")
+      } else {
+        console.error("[Send] Transaction failed:", result.error)
+        setTxError(result.error || "Transaction failed")
+        setStatus("error")
+        addToast({
+          type: "error",
+          title: "Transaction failed",
+          message: result.error || "Unknown error",
+        })
+      }
+    } catch (err) {
+      // Catch any unhandled exceptions to prevent component crash
+      console.error("[Send] Unhandled error:", err)
+      const errorMessage = err instanceof Error ? err.message : "Unexpected error occurred"
+      setTxError(errorMessage)
       setStatus("error")
       addToast({
         type: "error",
         title: "Transaction failed",
-        message: result.error || "Unknown error",
+        message: errorMessage,
       })
     }
   }, [send, amount, recipient, defaultPrivacyLevel, addToast])

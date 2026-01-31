@@ -200,21 +200,42 @@ export function usePrivacyProvider(): UsePrivacyProviderReturn {
   const wrappedSignTransaction = useCallback(
     async (tx: Uint8Array): Promise<Uint8Array | null> => {
       if (!signTransaction) {
+        console.error("[PrivacyProvider] signTransaction not available")
         throw new Error("Wallet not connected")
       }
 
-      // Convert Uint8Array to Transaction for native wallet
-      const { Transaction } = await import("@solana/web3.js")
-      const transaction = Transaction.from(tx)
-      const signed = await signTransaction(transaction)
+      try {
+        // Convert Uint8Array to Transaction for native wallet
+        const { Transaction } = await import("@solana/web3.js")
 
-      if (!signed) {
-        return null
+        let transaction: import("@solana/web3.js").Transaction
+        try {
+          transaction = Transaction.from(tx)
+        } catch (deserializeErr) {
+          console.error("[PrivacyProvider] Failed to deserialize transaction:", deserializeErr)
+          throw new Error("Invalid transaction format")
+        }
+
+        debug("[PrivacyProvider] Requesting signature for transaction...")
+        const signed = await signTransaction(transaction)
+
+        if (!signed) {
+          console.log("[PrivacyProvider] User rejected signing")
+          return null
+        }
+
+        debug("[PrivacyProvider] Transaction signed successfully")
+        // Return the fully signed transaction
+        // The signed transaction should have all required signatures after partialSign
+        return signed.serialize()
+      } catch (err) {
+        console.error("[PrivacyProvider] Sign transaction failed:", err)
+        // Re-throw with more context
+        if (err instanceof Error) {
+          throw err
+        }
+        throw new Error("Failed to sign transaction")
       }
-
-      // Return the fully signed transaction
-      // The signed transaction should have all required signatures after partialSign
-      return signed.serialize()
     },
     [signTransaction]
   )
