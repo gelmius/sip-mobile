@@ -71,7 +71,8 @@ export interface ImportKeyInput {
 // CONSTANTS
 // ============================================================================
 
-const STEALTH_KEYS_STORE = "sip_stealth_keys"
+const STEALTH_KEYS_STORE_V2 = "sip_stealth_keys_v2"
+const STEALTH_KEYS_STORE_LEGACY = "sip_stealth_keys"
 const DISCLOSURES_STORE = "sip_viewing_disclosures"
 const IMPORTED_KEYS_STORE = "sip_imported_viewing_keys"
 const EXPORT_VERSION = 1
@@ -82,6 +83,47 @@ const EXPORT_VERSION = 1
 
 function generateId(): string {
   return `vk_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+}
+
+/**
+ * Load stealth keys from storage (v2 format or legacy)
+ * Returns the keys object with viewing/spending keys
+ */
+async function loadStealthKeys(): Promise<{
+  viewingPublicKey: string
+  viewingPrivateKey: string
+  spendingPublicKey: string
+} | null> {
+  // Try v2 format first (archival storage)
+  const storedV2 = await SecureStore.getItemAsync(STEALTH_KEYS_STORE_V2)
+  if (storedV2) {
+    try {
+      const storage = JSON.parse(storedV2)
+      // V2 format has records array with activeKeyId
+      if (storage.activeKeyId && storage.records) {
+        const activeRecord = storage.records.find(
+          (r: { id: string }) => r.id === storage.activeKeyId
+        )
+        if (activeRecord?.keys) {
+          return activeRecord.keys
+        }
+      }
+    } catch {
+      // Continue to legacy
+    }
+  }
+
+  // Fall back to legacy format
+  const storedLegacy = await SecureStore.getItemAsync(STEALTH_KEYS_STORE_LEGACY)
+  if (storedLegacy) {
+    try {
+      return JSON.parse(storedLegacy)
+    } catch {
+      return null
+    }
+  }
+
+  return null
 }
 
 function encodeExport(data: ViewingKeyExport): string {
@@ -183,13 +225,12 @@ export function useViewingKeys(): UseViewingKeysReturn {
       }
 
       try {
-        const storedKeys = await SecureStore.getItemAsync(STEALTH_KEYS_STORE)
-        if (!storedKeys) {
-          setError("No stealth keys found")
+        const keys = await loadStealthKeys()
+        if (!keys) {
+          setError("No stealth keys found. Generate a stealth address first.")
           return null
         }
 
-        const keys = JSON.parse(storedKeys)
         const now = Date.now()
 
         const exportData: ViewingKeyExport = {
@@ -354,10 +395,8 @@ export function useViewingKeys(): UseViewingKeysReturn {
 
   const hasViewingKey = useCallback(async (): Promise<boolean> => {
     try {
-      const storedKeys = await SecureStore.getItemAsync(STEALTH_KEYS_STORE)
-      if (!storedKeys) return false
-      const keys = JSON.parse(storedKeys)
-      return Boolean(keys.viewingPrivateKey)
+      const keys = await loadStealthKeys()
+      return Boolean(keys?.viewingPrivateKey)
     } catch {
       return false
     }
