@@ -303,9 +303,12 @@ This is the unique value-add: **"Privacy institutions can actually use"**
 
 ```
 app/(tabs)/           # Tab screens (index, send, receive, swap, settings)
+app/(auth)/           # Auth screens (onboarding, wallet-setup, create/import wallet)
 src/components/       # UI components (Button, Card, Input, Modal, Toggle)
+src/components/onboarding/  # Onboarding slides (Welcome, Privacy, Stealth, ViewingKeys, Security)
+src/components/demos/       # Demo components (ComparisonCard, BlockchainVisualizer, PermissionCard)
 src/stores/           # Zustand stores (wallet, settings, privacy, swap, toast)
-src/hooks/            # Custom hooks (useNativeWallet, usePrivacyProvider, etc.)
+src/hooks/            # Custom hooks (useNativeWallet, usePrivacyProvider, useStealthDemo, etc.)
 src/privacy-providers/# Privacy Provider adapters (#73)
 src/lib/              # Anchor client, stealth utils
 publishing/           # APK builds, dApp Store config
@@ -464,7 +467,7 @@ All providers tested on Seeker with real on-chain transactions:
 
 ---
 
-**Last Updated:** 2026-01-30
-**Status:** v0.1.5 | dApp Store submitted | All 7 Privacy Providers E2E Verified
+**Last Updated:** 2026-01-31
+**Status:** v0.1.5 | dApp Store submitted | All 7 Privacy Providers E2E Verified | Interactive Onboarding
 **Positioning:** Privacy in Your Pocket — consumers, daily use, native security
 **Companion:** sip-app ("Privacy Command Center" — enterprise, compliance, power users)
