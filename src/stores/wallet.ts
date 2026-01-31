@@ -8,6 +8,9 @@ import type { ChainType, WalletType, ConnectionMethod, WalletProviderType, Store
 // ============================================================================
 
 export interface WalletState {
+  // Hydration state (for wallet gate)
+  _hasHydrated: boolean
+
   // Connection state
   isConnected: boolean
   isConnecting: boolean
@@ -65,6 +68,9 @@ function generateNickname(address: string, index: number): string {
 export const useWalletStore = create<WalletState>()(
   persist(
     (set, get) => ({
+      // Hydration state (for wallet gate)
+      _hasHydrated: false,
+
       // Initial state
       isConnected: false,
       isConnecting: false,
@@ -242,6 +248,10 @@ export const useWalletStore = create<WalletState>()(
         accounts: state.accounts,
         activeAccountId: state.activeAccountId,
       }),
+      onRehydrateStorage: () => () => {
+        // Set hydration flag after store is rehydrated
+        useWalletStore.setState({ _hasHydrated: true })
+      },
     }
   )
 )
