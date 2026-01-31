@@ -180,15 +180,17 @@ app/settings/backup.tsx        # View/backup recovery phrase
 
 ### Provider Status (7 Providers)
 
-| Provider | Status | SDK | Send | Swap | Technology |
-|----------|--------|-----|------|------|------------|
-| **SIP Native** | ✅ Complete | Built-in | ✅ | ✅ | Stealth + Pedersen |
-| **Privacy Cash** | ✅ Complete | `privacycash@1.1.11` | ✅ | ❌ | Pool mixing (ZK) |
-| **ShadowWire** | ✅ Complete | `@radr/shadowwire@1.1.15` | ✅ | ❌ | Bulletproofs |
-| **MagicBlock** | ✅ Complete | `@magicblock-labs/ephemeral-rollups-sdk` | ✅ | ❌ | TEE (Intel TDX) |
-| **Arcium** | ✅ **Deployed** | `@arcium-hq/client` | ✅ | ✅ | MPC |
-| **Inco** | ✅ Complete | `@inco/solana-sdk` | ✅ | ✅ | FHE/TEE |
-| **C-SPL** | ✅ Complete | Token-2022 simulated | ✅ | ❌ | Encrypted amounts |
+| Provider | Send | Receive/Claim | Implementation | Notes |
+|----------|------|---------------|----------------|-------|
+| **SIP Native** | ✅ Real | ✅ Real | Production | Full stealth + Pedersen + viewing keys |
+| **Privacy Cash** | ✅ Real* | ⚠️ Via SIP | Fallback | *Falls back to SIP Native. Native pool flow planned. |
+| **ShadowWire** | ✅ Real* | ⚠️ Via SIP | Fallback | *Falls back to SIP Native. Native balance flow planned. |
+| **MagicBlock** | ✅ Real* | ⚠️ Via SIP | Fallback | *Falls back to SIP Native. TEE delegation planned. |
+| **Arcium** | ✅ Real* | ⚠️ Via SIP | Fallback | *Falls back to SIP Native. MPC queue/claim planned. |
+| **Inco** | ⚠️ Pending | ⚠️ Via SIP | Simulated | Waiting for Solana program deployment (Q1 2026) |
+| **C-SPL** | ⚠️ Pending | ⚠️ Via SIP | Simulated | Waiting for ZK ElGamal proofs on Solana (Q1 2026) |
+
+**Current Reality:** All non-SIP-Native providers fall back to SIP Native for the actual on-chain transfer. Native integration roadmap above.
 
 ### C-SPL Integration Notes
 
@@ -231,6 +233,50 @@ Balance:         3.77 SOL (reclaimable)
 - Pool-based mixing model (Tornado-style, ZK proofs)
 - Supports SOL, USDC, USDT
 - NO swap support — only deposit/withdraw
+
+### Multi-Provider Native Integration Roadmap (Post-Launch)
+
+**Current State:** All providers use unified Send/Receive/Scan UI with SIP Native fallback.
+
+**Target State:** Adaptive UI that changes based on selected provider's native architecture.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  ADAPTIVE UI ARCHITECTURE (Planned Q1-Q2 2026)                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  Provider Selected → UI Adapts to Provider's Flow                       │
+│                                                                         │
+│  SIP Native    → [Send] [Receive] [Scan] [Claim]    (Stealth addresses) │
+│  Privacy Cash  → [Deposit] [Notes] [Withdraw]       (Pool mixing)       │
+│  ShadowWire    → [Deposit] [Transfer] [Withdraw]    (Internal balance)  │
+│  MagicBlock    → [Delegate] [Private Tx] [Undelegate] (TEE custody)     │
+│  Arcium        → [Queue] [Status] [Claim Result]    (MPC computation)   │
+│                                                                         │
+│  Each provider has fundamentally different architecture:                │
+│  • No universal "scan" — Privacy Cash uses notes, not scanning          │
+│  • Different balance models — internal ledger vs on-chain               │
+│  • Different claim mechanisms — withdrawal vs claim vs undelegate       │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+| Phase | Provider | Scope | Est. Duration |
+|-------|----------|-------|---------------|
+| 0 | SIP Native | ✅ Complete | Done |
+| 1 | Architecture Refactor | Provider-specific routes, adaptive home | 1 week |
+| 2 | Privacy Cash | Deposit/Notes/Withdraw flow | 2 weeks |
+| 3 | ShadowWire | Internal balance + transfers | 2 weeks |
+| 4 | MagicBlock | TEE delegation model | 2 weeks |
+| 5 | Arcium | MPC computation queue/claim | 1 week |
+| 6 | Integration | Testing, unified settings | 1 week |
+
+**Detailed Strategy:** See `~/.claude/sip-protocol/MULTI-PROVIDER-STRATEGY.md`
+
+**Why This Matters:**
+- Current implementation works but is misleading (all fall back to SIP Native)
+- Real money requires real provider integration, not simulated flows
+- Each provider's SDK has different capabilities and UX requirements
 
 ### Key Files
 
