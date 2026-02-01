@@ -15,8 +15,10 @@ export { SipNativeAdapter, createSipNativeAdapter } from "./sip-native"
 // export { PrivacyCashAdapter, createPrivacyCashAdapter } from "./privacy-cash"
 export { ShadowWireAdapter, createShadowWireAdapter } from "./shadowwire"
 export { MagicBlockAdapter, createMagicBlockAdapter } from "./magicblock"
-export { ArciumAdapter, createArciumAdapter } from "./arcium"
-export { IncoAdapter, createIncoAdapter } from "./inco"
+// Arcium disabled - @arcium-hq/client imports Node.js 'fs' (incompatible with RN)
+// export { ArciumAdapter, createArciumAdapter } from "./arcium"
+// Inco disabled - @inco/solana-sdk uses ecies-geth which imports Node.js 'crypto'
+// export { IncoAdapter, createIncoAdapter } from "./inco"
 export { CSPLAdapter, createCSPLAdapter } from "./cspl"
 
 // Registry & Factory

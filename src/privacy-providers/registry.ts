@@ -15,8 +15,10 @@ import { createSipNativeAdapter } from "./sip-native"
 // import { createPrivacyCashAdapter } from "./privacy-cash"
 import { createShadowWireAdapter } from "./shadowwire"
 import { createMagicBlockAdapter } from "./magicblock"
-import { createArciumAdapter } from "./arcium"
-import { createIncoAdapter } from "./inco"
+// Arcium disabled - @arcium-hq/client imports Node.js 'fs' (incompatible with RN)
+// import { createArciumAdapter } from "./arcium"
+// Inco disabled - @inco/solana-sdk uses ecies-geth which imports Node.js 'crypto'
+// import { createIncoAdapter } from "./inco"
 import { createCSPLAdapter } from "./cspl"
 import { debug } from "@/utils/logger"
 
@@ -55,9 +57,11 @@ export function createAdapter(
     case "magicblock":
       return createMagicBlockAdapter(options)
     case "arcium":
-      return createArciumAdapter(options)
+      // Arcium disabled - @arcium-hq/client imports Node.js 'fs' (incompatible with RN)
+      throw new Error("Arcium is not available on mobile. Please use SIP Native or another provider.")
     case "inco":
-      return createIncoAdapter(options)
+      // Inco disabled - @inco/solana-sdk uses ecies-geth which imports Node.js 'crypto'
+      throw new Error("Inco is not available on mobile. Please use SIP Native or another provider.")
     case "cspl":
       return createCSPLAdapter(options)
     default:
